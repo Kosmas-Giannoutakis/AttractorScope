@@ -182,7 +182,7 @@ AttractorScope {
                 11, {  // Distance from origin
                     if(originalPoints.notNil and: { originalPoints[i].notNil }) {
                         distance = sqrt(originalPoints[i].collect({ |v| v*v }).sum);
-                        hue = distance.linlin(0, 3, 0.66, 0.0).clip(0, 1);  // Blue (near) to Red (far)
+                        hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);  // Blue (near) to Red (far)
                     } {
                         hue = 0.5;
                     };
@@ -277,7 +277,7 @@ AttractorScope {
 			var colors, pointSize;
 
 			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
-			pointSize = (2.5 / zoom).clip(1.5, 4.0);
+			pointSize = (2 * zoom).clip(1.5, 4.0);
 
 			// Render with pre-calculated colors (fast path)
 			if(colors.notNil) {
@@ -314,7 +314,7 @@ AttractorScope {
 				var coreSize;
 				glowLevels.do { |level|
 					// REDUCED: Smaller size multiplier (was 2.5, now 1.8)
-					var size = (level + 1) * 1.8;
+					var size = (level + 1) * 1.8 * (zoom + 1);
 					// INCREASED: Higher alpha dropoff for sharper core
 					var alphaScale = (1 - (level / glowLevels)).pow(1.5) * 0.5;
 

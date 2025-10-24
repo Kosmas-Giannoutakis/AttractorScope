@@ -14,7 +14,7 @@ By constructing delayed coordinate representations of input signals in 2D–6D s
 This approach is based on **delay coordinate embedding**, a method introduced by **Packard et al. (1980)** and formalized by **Takens (1981)**.
 In this technique, a single time series is reconstructed in an N-dimensional phase space using time-delayed versions of the signal:
 
-\[ \mathbf{x}(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)] \]
+`x(t) = [s(t), s(t - τ), s(t - 2τ), ..., s(t - (N-1)τ)]`
 
 where \( s(t) \) is the signal, \( \tau \) is the delay time, and \( N \) is the embedding dimension.
 This process reveals the attractor geometry of the underlying dynamical system, allowing visual analysis of periodic, quasi-periodic, and chaotic behaviors.
@@ -203,4 +203,4 @@ Different delay values shape the attractor differently. Try values between 0.001
 Developed by Kosmas Giannoutakis for experimental sound analysis and nonlinear signal visualization in SuperCollider.
 
 ## License
-Licensed under the **GNU General Public License v3.0**. See `LICENSE` for details.
+Licensed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE) for details.

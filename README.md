@@ -14,14 +14,17 @@ By constructing delayed coordinate representations of input signals in 2D–6D s
 This approach is based on **delay coordinate embedding**, a method introduced by **Packard et al. (1980)** and formalized by **Takens (1981)**.
 In this technique, a single time series is reconstructed in an N-dimensional phase space using time-delayed versions of the signal:
 
-$x(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)]$
+$$
+x(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)]
+$$
+
 
 where \( s(t) \) is the signal, \( \tau \) is the delay time, and \( N \) is the embedding dimension.
 This process reveals the attractor geometry of the underlying dynamical system, allowing visual analysis of periodic, quasi-periodic, and chaotic behaviors.
 
 **References:**
 - Packard, N. H., Crutchfield, J. P., Farmer, J. D., & Shaw, R. S. (1980). *Geometry from a time series.* Physical Review Letters, 45(9), 712–716.
-- Takens, F. (1981). *Detecting strange attractors in turbulence.* Lecture Notes in Mathematics, 898, 366–381.
+- Takens F. (1981). Detecting strange attractors in turbulence. In Dynamical Systems and Turbulence: Proceedings of a Symposium Held at the University of Warwick 1979/80, ed. D Rand, L-S Young, pp. 366–81. Berlin: Springer-Verlag
 - Kantz, H., & Schreiber, T. (2004). *Nonlinear Time Series Analysis* (2nd ed.). Cambridge University Press.
 
 ---

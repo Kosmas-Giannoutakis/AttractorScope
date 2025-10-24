@@ -1,4 +1,3 @@
-```markdown
 # AttractorScope
 
 A real-time audio visualization tool for **SuperCollider** that generates attractor-based visualizations from audio or control bus signals in 2D through 6D space.
@@ -15,9 +14,7 @@ By constructing delayed coordinate representations of input signals in 2D–6D s
 This approach is based on **delay coordinate embedding**, a method introduced by **Packard et al. (1980)** and formalized by **Takens (1981)**.
 In this technique, a single time series is reconstructed in an N-dimensional phase space using time-delayed versions of the signal:
 
-\[
-\mathbf{x}(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)]
-\]
+\[ \mathbf{x}(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)] \]
 
 where \( s(t) \) is the signal, \( \tau \) is the delay time, and \( N \) is the embedding dimension.
 This process reveals the attractor geometry of the underlying dynamical system, allowing visual analysis of periodic, quasi-periodic, and chaotic behaviors.
@@ -106,12 +103,12 @@ a = AttractorScope(s, 0);
 (
 // Chaotic feedback oscillator
 {
-	var fb = LocalIn.ar(2);
-	var freq = 120;
-	var mod = SinOsc.kr(0.05).range(0, 2); // slow morph control
-	var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
-	LocalOut.ar(sig);
-	sig!2
+    var fb = LocalIn.ar(2);
+    var freq = 120;
+    var mod = SinOsc.kr(0.05).range(0, 2); // slow morph control
+    var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
+    LocalOut.ar(sig);
+    sig!2
 }.play;
 
 // Visualize it
@@ -207,4 +204,3 @@ Developed by Kosmas Giannoutakis for experimental sound analysis and nonlinear s
 
 ## License
 Licensed under the **GNU General Public License v3.0**. See `LICENSE` for details.
-```

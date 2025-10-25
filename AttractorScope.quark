@@ -1,0 +1,11 @@
+(
+	name: "AttractorScope",
+	summary: "Real-time multi-dimensional phase-space visualization of audio signals",
+	version: "1.0.0",
+	schelp: "AttractorScope",
+	dependencies: [],
+	license: "GPL-3.0",
+	copyright: "Kosmas Giannoutakis, 2025",
+	url: "https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic",
+	author: "Kosmas Giannoutakis"
+)

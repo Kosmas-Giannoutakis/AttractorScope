@@ -842,6 +842,9 @@ AttractorScope {
 			scopeView.animate = true;
 			scopeView.frameRate = 30;
 			scopeView.minHeight_(500);
+			scopeView.canFocus = true;
+
+
 
 			// *** START: NEW MOUSE ACTIONS ***
 			scopeView.mouseDownAction = { |view, x, y|
@@ -851,6 +854,8 @@ AttractorScope {
 				// Store the starting position of the drag
 				lastMouseX = x;
 				lastMouseY = y;
+
+				view.focus;
 			};
 
 			scopeView.mouseMoveAction = { |view, x, y|
@@ -881,11 +886,11 @@ AttractorScope {
 			// *** END: NEW MOUSE ACTIONS ***
 
 
-			delay1Slider = Slider().orientation_(\horizontal);
-			trailSlider = Slider().orientation_(\horizontal);
-			resolutionSlider = Slider().orientation_(\horizontal);
-			rotationSpeedSlider = Slider().orientation_(\horizontal);
-			zoomSlider = Slider().orientation_(\horizontal);
+			delay1Slider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+			trailSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+			resolutionSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+			rotationSpeedSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+			zoomSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
 
 			dimensionMenu = PopUpMenu().items_(["2D", "3D", "4D", "5D", "6D"]);
 			colorMenu = PopUpMenu().items_(["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"]);
@@ -973,15 +978,22 @@ AttractorScope {
 				).margins_(0).spacing_(4)
 			).margins_(2).spacing_(0);
 
+			scopeView.focus;
+
 			delay1Slider.action = { |me| setDelayTime1.value(delaySpec.map(me.value)) };
+			delay1Slider.mouseUpAction = { scopeView.focus };
 			delay1Box.action = { |me| setDelayTime1.value(me.value) };
 			trailSlider.action = { |me| setTrailLength.value(trailSpec.map(me.value).asInteger) };
+			trailSlider.mouseUpAction = { scopeView.focus };
 			trailBox.action = { |me| setTrailLength.value(me.value) };
 			resolutionSlider.action = { |me| setResolution.value(resolutionSpec.map(me.value).asInteger) };
+			resolutionSlider.mouseUpAction = { scopeView.focus };
 			resolutionBox.action = { |me| setResolution.value(me.value) };
 			rotationSpeedSlider.action = { |me| setRotationSpeed.value(rotationSpeedSpec.map(me.value)) };
+			rotationSpeedSlider.mouseUpAction = { scopeView.focus };
 			rotationSpeedBox.action = { |me| setRotationSpeed.value(me.value) };
 			zoomSlider.action = { |me| setZoom.value(zoomSpec.map(me.value)) };
+			zoomSlider.mouseUpAction = { scopeView.focus };
 			zoomBox.action = { |me| setZoom.value(me.value) };
 			autoRotateCheckBox.action = { |cb| setAutoRotate.value(cb.value) };
 			dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
@@ -989,7 +1001,7 @@ AttractorScope {
 			styleMenu.action = { |me| setStyle.value(me.value) };
 			idxNumBox.action = { |me| setIndex.value(me.value) };
 			rateMenu.action = { |me| setRate.value(me.value) };
-			view.asView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
+			scopeView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
 			view.onClose = { view = nil; this.quit; };
 
 			if(window.notNil) { window.front };
@@ -1862,25 +1874,46 @@ AttractorScope {
     style { ^drawStyle }
     style_ { arg val; setStyle.value(val) }
 
-    resetView {
-        angleX = 0.6;
-        angleY = 0.8;
-        angle4D_XW = 0.0;
-        angle4D_YW = 0.0;
-        angle4D_ZW = 0.0;
-        angle5D_XW = 0.0;
-        angle5D_YW = 0.0;
-        angle5D_ZW = 0.0;
-        angle5D_XV = 0.0;
-        angle5D_YV = 0.0;
-        angle6D_XW = 0.0;
-        angle6D_YW = 0.0;
-        angle6D_ZW = 0.0;
-        angle6D_XV = 0.0;
-        angle6D_YV = 0.0;
-        angle6D_ZV = 0.0;
-        this.zoom = 1.0;
-    }
+	resetView {
+		angleX = 0.6;
+		angleY = 0.8;
+		angle4D_XW = 0.0;
+		angle4D_YW = 0.0;
+		angle4D_ZW = 0.0;
+		angle5D_XW = 0.0;
+		angle5D_YW = 0.0;
+		angle5D_ZW = 0.0;
+		angle5D_XV = 0.0;
+		angle5D_YV = 0.0;
+		angle6D_XW = 0.0;
+		angle6D_YW = 0.0;
+		angle6D_ZW = 0.0;
+		angle6D_XV = 0.0;
+		angle6D_YV = 0.0;
+		angle6D_ZV = 0.0;
+		setZoom.value(1.0);
+	}
+
+	resetAll {
+		// "Resetting all AttractorScope parameters to their defaults.".postln;
+
+		// Reset the "subject" (shape, style, etc.)
+		setDelayTime1.value(defaultDelayTime);
+		setTrailLength.value(500);
+		setResolution.value(800);
+		setColor.value(0);
+		setStyle.value(0);
+		setRotationSpeed.value(1.0);
+		setAutoRotate.value(true);
+
+		// Reset the "camera" by calling the dedicated method
+		this.resetView;
+
+		// Set dimension last, as it triggers a synth rebuild
+		if(dimension != 3) {
+			setDimension.value(3);
+		};
+	}
 
     clearPoints {
         points = [];
@@ -1916,7 +1949,7 @@ AttractorScope {
             { char === $5 }, { setDimension.value(5) },
             { char === $6 }, { setDimension.value(6) },
             { char === $m }, { this.toggleSize },
-            { char === $r }, { this.resetView },
+            { char === $r }, { this.resetAll },
             { char === $a }, { setAutoRotate.value(autoRotate.not) },
             { char === $c }, { setColor.value((colorChoice + 1) % 13) },
             { ^false }

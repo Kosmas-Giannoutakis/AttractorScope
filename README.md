@@ -137,22 +137,33 @@ a = AttractorScope(
 
 ---
 
+### **Mouse Click & Drag Action**
+
+You can manually control the rotation of the visualization in 3D and higher dimensions.
+
+*   **Click and Drag:** Click anywhere inside the visualization window and drag the mouse to manually rotate the attractor.
+    *   Dragging **horizontally** (left and right) rotates the view around the **Y-axis**.
+    *   Dragging **vertically** (up and down) rotates the view around the **X-axis**.
+*   **Auto-Rotation Pause:** The moment you click to drag, `Auto-Rotate` is automatically disabled, giving you full control. You can re-enable it using the 'a' key or the checkbox.
+*   **Release:** When you release the mouse button, the manual rotation stops, and the view remains in its new orientation.
+
+---
+
 ## Keyboard Shortcuts
 
 | Key | Function |
 | :--- | :--- |
-| `2`–`6` | Set visualization dimension |
-| `c` | Cycle color schemes |
-| `s` | Cycle rendering styles |
-| `m` | Toggle window size |
-| `r` | Reset view |
-| `a` | Toggle auto-rotation |
-| `Space` | Clear all points |
-| `+` / `=` | Increase rotation speed |
-| `-` | Decrease rotation speed |
-| `z` | Zoom in |
-| `_` | Zoom out |
-| Mouse drag | Manual rotation (disables auto-rotation) |
+| **`2`**–**`6`** | Set visualization dimension directly to 2D, 3D, 4D, 5D, or 6D. |
+| **`c`** | Cycle through the available **color schemes**. |
+| **`s`** | Cycle through the available rendering **styles**. |
+| **`a`** | Toggle **auto-rotation** on or off. |
+| **`r`** | **Reset** the view's rotation and zoom to their default states. |
+| **`m`** | Toggle the main window **size** between small and large presets. |
+| **`[`** / **`]`** | Decrease / Increase the base **Delay (Dt)**. |
+| **`{`** / **`}`** | Decrease / Increase the **Trail** length. |
+| **`<`** / **`>`** | Decrease / Increase the **Resolution**. |
+| **`,`** / **`.`** | Decrease / Increase the **Rotation Speed**. |
+| **`-`** / **`=`** | Decrease / Increase the **Zoom** level. |
 
 ---
 

@@ -4,8 +4,8 @@
 	version: "1.0.0",
 	schelp: "AttractorScope",
 	dependencies: [],
-	license: "GPL-3.0",
+	license: "GNU General Public License v3.0",
 	copyright: "Kosmas Giannoutakis, 2025",
-	url: "https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic",
+	url: "https://github.com/Kosmas-Giannoutakis/AttractorScope",
 	author: "Kosmas Giannoutakis"
 )

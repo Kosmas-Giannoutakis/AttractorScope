@@ -213,8 +213,8 @@ Different delay values shape the attractor differently. Try values between 0.001
 
 ---
 
-## Credits
-Developed by Kosmas Giannoutakis for experimental sound analysis and nonlinear signal visualization in SuperCollider.
+## Contributing
+Contributions are welcome! If you find a bug, have an idea for a new feature, or want to improve the implementation, please feel free to open an issue or submit a pull request.
 
 ## License
 Licensed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE) for details.

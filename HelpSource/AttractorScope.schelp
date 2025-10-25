@@ -1,0 +1,336 @@
+TITLE:: AttractorScope
+summary:: Real-time multi-dimensional phase-space visualization of audio signals
+categories:: GUI, Analysis, Visualization
+related:: Classes/Stethoscope, Classes/FreqScope, Classes/Bus, Classes/Buffer
+
+DESCRIPTION::
+AttractorScope is a real-time visualization tool that transforms audio or control-rate signals into dynamic, multi-dimensional strong::phase-space embeddings::. By constructing delayed coordinate representations of input signals in 2D through 6D space, it provides an intuitive way to observe the underlying structure, periodicity, and complexity of sound signals through the lens of nonlinear dynamics and chaos theory.
+
+This approach is based on strong::delay coordinate embedding::, a method introduced by Packard et al. (1980) and formalized by Takens (1981). In this technique, a single time series is reconstructed in an N-dimensional phase space using time-delayed versions of the signal:
+
+teletype::
+x(t) = [s(t), s(t - τ), s(t - 2τ), ..., s(t - (N-1)τ)]
+::
+
+where code::s(t):: is the signal, code::τ:: is the delay time, and code::N:: is the embedding dimension. This process reveals the attractor geometry of the underlying dynamical system, allowing visual analysis of periodic, quasi-periodic, and chaotic behaviors.
+
+LIST::
+## strong::Multi-dimensional visualization:: - Display signals in 2D through 6D reconstructed phase space
+## strong::Multiple rendering styles:: - Lines, Points, Smooth, Glow, Ribbon, and Heat Map visualization modes
+## strong::Dynamic color schemes:: - Static colors, Rainbow, Velocity-based, Distance-based, and Curvature-based coloring
+## strong::Interactive controls:: - Full GUI with sliders, keyboard shortcuts, and mouse-based rotation
+## strong::Real-time rotation:: - Continuous or manual rotation through any dimensional plane
+## strong::Performance optimized:: - Adaptive resolution and cached rendering for smooth real-time visualization
+::
+
+strong::Keyboard Shortcuts::
+
+table::
+## strong::Key:: || strong::Function::
+## code::2::–code::6:: || Set dimension directly (2D, 3D, 4D, 5D, 6D)
+## code::c:: || Cycle through color schemes
+## code::s:: || Cycle through drawing styles
+## code::a:: || Toggle auto-rotation on/off
+## code::r:: || Reset rotation and zoom to defaults
+## code::m:: || Toggle window size (small/large)
+## code::[:: / code::]:: || Decrease / Increase delay time
+## code::{:: / code::}:: || Decrease / Increase trail length
+## code::<:: / code::>:: || Decrease / Increase resolution
+## code::,:: / code::.:: || Decrease / Increase rotation speed
+## code::-:: / code::=:: || Decrease / Increase zoom
+::
+
+strong::Mouse Interaction::: Click and drag to manually rotate the attractor in 3D and higher dimensions. Horizontal drag rotates around the Y-axis, vertical drag rotates around the X-axis. Auto-rotation automatically pauses when you click to drag.
+
+strong::Understanding Delay Time::: The code::delayTime1:: parameter is crucial for shaping the attractor. Too small (< 0.001s) causes points to collapse together. The sweet spot (0.005–0.02s) reveals rich attractor structure. Too large (> 0.05s) spreads points too far apart. Rule of thumb: For a signal at frequency code::f::, try code::delayTime1:: in the range code::1/(4*f):: to code::1/f::.
+
+strong::References::
+LIST::
+## Packard, N. H., Crutchfield, J. P., Farmer, J. D., & Shaw, R. S. (1980). emphasis::Geometry from a time series.:: Physical Review Letters, 45(9), 712–716.
+## Takens F. (1981). emphasis::Detecting strange attractors in turbulence.:: In Dynamical Systems and Turbulence, Springer-Verlag.
+## Kantz, H., & Schreiber, T. (2004). emphasis::Nonlinear Time Series Analysis:: (2nd ed.). Cambridge University Press.
+::
+
+CLASSMETHODS::
+
+METHOD:: new
+Creates a new AttractorScope instance and opens its GUI window. strong::Note::: AttractorScope only works with local servers, not remote servers.
+argument:: server
+The link::Classes/Server:: to use. Defaults to code::Server.default::.
+argument:: index
+The bus index to visualize, or a link::Classes/Bus:: object directly. Can be an audio or control bus. Default: 0.
+argument:: bufsize
+Internal buffer size for storing samples. Must be at least 128. Default: 4096.
+argument:: delayTime1
+The base delay time in seconds (τ). This is the fundamental parameter that shapes the attractor. The scope uses five delay times: τ, 2τ, 3τ, 4τ, 5τ. Range: 0.0001 to 0.05 seconds. Default: 0.01.
+argument:: trailLength
+Number of points visible in the trail. Higher values show more history but may impact performance. Range: 10 to 5000. Default: 500.
+argument:: resolution
+Points computed per second. Higher values provide smoother trajectories but use more CPU. Range: 100 to 2000. Default: 800.
+argument:: dimension
+The embedding dimension (number of delayed coordinates). code::2:: for classic 2D Lissajous-style figures, code::3:: for full 3D attractor visualization, code::4:: through code::6:: for higher-dimensional projections. Range: 2 to 6. Default: 3.
+argument:: rotationSpeed
+Multiplier for automatic rotation speed. Range: 0.1 to 5.0. Default: 1.0.
+argument:: zoom
+Initial zoom level. Range: 0.25 to 4.0. Default: 1.0.
+argument:: rate
+Bus rate, either code::\audio:: or code::\control::. Default: code::\audio::.
+argument:: view
+An optional parent link::Classes/View:: to embed the scope into. If code::nil::, creates a standalone window.
+
+
+EXAMPLES::
+
+code::
+1. Basic Usage
+
+Boot the server and create a simple visualization.
+
+(
+s.boot;
+)
+
+(
+// Simple sine wave test
+{ SinOsc.ar(440) * 0.5 }.play;
+
+// Create an AttractorScope on audio bus 0
+a = AttractorScope(s, 0);
+)
+
+a.quit;
+::
+
+code::
+2. Chaotic Feedback Oscillator
+
+Create a chaotic feedback system with custom visualization parameters.
+
+(
+// Create a chaotic feedback system
+x = {
+    var fb = LocalIn.ar(2);
+    var freq = 120;
+    var mod = SinOsc.kr(0.05).range(0, 2);
+    var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
+    LocalOut.ar(sig);
+    sig!2
+}.play;
+
+// Visualize with custom parameters
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 3,
+    trailLength: 1000,
+    resolution: 1000,
+    delayTime1: 0.01
+);
+)
+
+x.free;
+a.quit;
+::
+
+code::
+3. Exploring Different Delay Times
+
+Experiment with different delay times to see how the attractor structure changes.
+
+(
+// Play a simple tone
+{ SinOsc.ar(200) * 0.3 ! 2 }.play;
+
+// Create scope
+a = AttractorScope(s, 0, dimension: 3);
+)
+
+// Try different delay times by using keyboard shortcuts
+// Press [ and ] to decrease/increase delay time
+// Or set directly:
+
+// Very short delay - tight circle
+a.delayTime1 = 0.002;
+
+// Medium delay - interesting Lissajous-like patterns
+a.delayTime1 = 0.01;
+
+// Longer delay - larger, more spread out structures
+a.delayTime1 = 0.03;
+::
+
+code::
+4. Complex Multi-Oscillator System
+
+Visualize multiple oscillators with slow modulation in higher dimensions.
+
+(
+// Multiple oscillators with slow modulation
+x = {
+    var freqs = [100, 150.3, 200.7];
+    var sig = Mix(
+        SinOsc.ar(
+            freqs * LFNoise1.kr([0.1, 0.15, 0.2]).range(0.98, 1.02),
+            0,
+            0.2
+        )
+    );
+    sig ! 2
+}.play;
+
+// Visualize in 4D with longer trail
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 4,
+    trailLength: 1500,
+    resolution: 1000,
+    delayTime1: 0.015
+);
+)
+
+// Try different visualization styles using keyboard
+// Press 's' to cycle through styles: Lines, Points, Smooth, Glow, Ribbon, Heat Map
+
+// Or set directly:
+a.style = 3; // Glow
+a.style = 4; // Ribbon
+a.style = 5; // Heat Map
+
+// Try different color schemes using keyboard
+// Press 'c' to cycle through colors
+
+// Or set directly:
+a.color = 9;  // Rainbow
+a.color = 10; // Velocity
+a.color = 11; // Distance
+a.color = 12; // Curvature
+
+x.free;
+a.quit;
+::
+
+code::
+5. Analyzing Noise
+
+Compare how different types of noise appear in phase space.
+
+(
+// Pink noise
+{ PinkNoise.ar(0.3) ! 2 }.play;
+
+// Higher dimension often reveals structure in noise
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 5,
+    trailLength: 2000,
+    resolution: 1200
+);
+)
+
+// Compare with white noise
+{ WhiteNoise.ar(0.3) ! 2 }.play;
+
+// And with filtered noise
+{ Resonz.ar(WhiteNoise.ar, 800, 0.1) * 5 ! 2 }.play;
+
+a.quit;
+::
+
+code::
+6. Lorenz-like Attractor
+
+Create a Lorenz-inspired oscillator with chaotic behavior.
+
+(
+// Lorenz-inspired oscillator with chaos
+x = {
+    var freq, sig1, sig2, mix;
+    
+    // Two coupled oscillators with nonlinear feedback
+    freq = LFNoise1.kr(2).range(100, 500);
+    sig1 = SinOsc.ar(freq, LFNoise2.kr(0.5).range(0, 2pi));
+    sig2 = SinOsc.ar(freq * 1.5, sig1 * 3);
+    
+    mix = (sig1 * 0.7) + (sig2 * 0.3);
+    mix * 0.3 ! 2
+}.play;
+
+// Visualize with optimal settings for chaos
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 3,
+    trailLength: 1500,
+    resolution: 1000,
+    delayTime1: 0.015,
+    rotationSpeed: 0.5
+);
+
+// Use rainbow coloring to see trajectory evolution
+a.color = 9;
+)
+
+x.free;
+a.quit;
+::
+
+code::
+7. Control Rate Signals
+
+Visualize control-rate signals with appropriate delay settings.
+
+(
+// Control rate LFO
+b = Bus.control(s, 1);
+
+x = {
+    var lfo = LFNoise1.kr(5).range(-1, 1);
+    Out.kr(b, lfo);
+}.play;
+
+// Visualize control-rate bus
+a = AttractorScope(
+    server: s,
+    index: b,
+    rate: \control,
+    dimension: 2,
+    trailLength: 300,
+    delayTime1: 0.05  // Longer delay for slower control rate
+);
+)
+
+x.free;
+a.quit;
+b.free;
+::
+
+code::
+8. Embedding in a Custom GUI
+
+Embed AttractorScope into a custom window with other controls.
+
+(
+// Create a custom window
+w = Window("Custom Attractor", Rect(100, 100, 600, 650)).front;
+w.view.decorator = FlowLayout(w.view.bounds);
+
+// Add some controls
+StaticText(w, 580@20).string_("Custom Attractor Visualization");
+
+// Create AttractorScope embedded in the window
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 3,
+    view: w.view  // Embed in our custom window
+);
+
+// Play some audio
+x = { SinOsc.ar(LFNoise1.kr(1).range(200, 800)) * 0.3 ! 2 }.play;
+)
+
+x.free;
+w.close;
+::

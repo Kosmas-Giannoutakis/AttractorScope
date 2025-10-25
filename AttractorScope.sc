@@ -2,7 +2,7 @@ AttractorScope {
     classvar scopeInstances;
     classvar <defaultDelayTime = 0.01;
 
-    var makeGui, setDelayTime1, setIndex, setRate, setTrailLength, setResolution, setDimension, setRotationSpeed, setColor, setZoom, setStyle;
+    var makeGui, setDelayTime1, setIndex, setRate, setTrailLength, setResolution, setDimension, setRotationSpeed, setColor, setZoom, setStyle, setAutoRotate;
     var updateColors, rotateX, rotateY, project;
     var rotate4D_XW, rotate4D_YW, rotate4D_ZW, project4Dto3D;
     var rotate5D_XW, rotate5D_YW, rotate5D_ZW, rotate5D_XV, rotate5D_YV, project5Dto4D;
@@ -13,7 +13,7 @@ AttractorScope {
 
     var <window, <view, <scopeView;
     var delay1Slider, trailSlider, resolutionSlider, rotationSpeedSlider, zoomSlider;
-    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu;
+    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu, autoRotateCheckBox;
 
     var <server, synth;
     var maxDelayTime, maxBufSize;
@@ -28,6 +28,7 @@ AttractorScope {
     var <angle6D_XW, <angle6D_YW, <angle6D_ZW, <angle6D_XV, <angle6D_YV, <angle6D_ZV;
     var <scale, baseScale, <zoom;
     var <autoRotate;
+	var <lastMouseX, <lastMouseY;
     var sizeToggle = false;
     var points;
     var <lineColor;
@@ -109,6 +110,8 @@ AttractorScope {
         baseScale = 150;
         scale = baseScale * zoom;
         autoRotate = true;
+		lastMouseX = nil;
+        lastMouseY = nil;
         points = [];
         prevPoints = [];
 
@@ -820,134 +823,177 @@ AttractorScope {
             ];
         };
 
-        makeGui = { arg parent;
-            var gizmo;
+		makeGui = { arg parent;
+			var gizmo;
 
-            if(window.notNil) { window.close };
+			if(window.notNil) { window.close };
 
-            if(parent.isNil) {
-                view = window = Window(
-                    bounds: (smallSize).asRect.center_(Window.availableBounds.center)
-                ).name_("Attractor Scope");
-            } {
-                view = View(parent, Rect(0, 0, 800, 830));
-                window = nil;
-            };
+			if(parent.isNil) {
+				view = window = Window(
+					bounds: (smallSize).asRect.center_(Window.availableBounds.center)
+				).name_("Attractor Scope");
+			} {
+				view = View(parent, Rect(0, 0, 800, 830));
+				window = nil;
+			};
 
-            scopeView = UserView();
-            scopeView.drawFunc = { this.draw };
-            scopeView.animate = true;
-            scopeView.frameRate = 30;  // OPTIMIZED: 30fps is smooth and uses 50% less CPU
-            scopeView.minHeight_(500);
+			scopeView = UserView();
+			scopeView.drawFunc = { this.draw };
+			scopeView.animate = true;
+			scopeView.frameRate = 30;
+			scopeView.minHeight_(500);
 
-            delay1Slider = Slider().orientation_(\horizontal);
-            trailSlider = Slider().orientation_(\horizontal);
-            resolutionSlider = Slider().orientation_(\horizontal);
-            rotationSpeedSlider = Slider().orientation_(\horizontal);
-            zoomSlider = Slider().orientation_(\horizontal);
+			// *** START: NEW MOUSE ACTIONS ***
+			scopeView.mouseDownAction = { |view, x, y|
+				// When the mouse is clicked, stop auto-rotation
+				setAutoRotate.value(false);
 
-            dimensionMenu = PopUpMenu().items_(["2D", "3D", "4D", "5D", "6D"]);
-            colorMenu = PopUpMenu().items_(["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"]);
-            styleMenu = PopUpMenu().items_(["Lines", "Points", "Smooth", "Glow", "Ribbon", "Heat Map"]);
-            rateMenu = PopUpMenu().items_(["Audio", "Control"]);
+				// Store the starting position of the drag
+				lastMouseX = x;
+				lastMouseY = y;
+			};
 
-            idxNumBox = NumberBox().decimals_(0).step_(1).scroll_step_(1);
-            delay1Box = NumberBox().decimals_(4).step_(0.0001).scroll_step_(0.0001);
-            trailBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
-            resolutionBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
-            rotationSpeedBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
-            zoomBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+			scopeView.mouseMoveAction = { |view, x, y|
+				var deltaX, deltaY;
+				var sensitivity = 0.01; // Adjust this value to change rotation speed
 
-            gizmo = "999".bounds(idxNumBox.font).width + 20;
-            idxNumBox.fixedWidth = gizmo;
-            idxNumBox.align = \center;
+				// Ensure we have a starting point (i.e., mouseDown has occurred)
+				if(lastMouseX.notNil) {
+					// Calculate the distance moved since the last event
+					deltaX = x - lastMouseX;
+					deltaY = y - lastMouseY;
 
-            delay1Box.fixedWidth_(70);
-            trailBox.fixedWidth_(70).clipLo_(10).clipHi_(5000);
-            resolutionBox.fixedWidth_(70).clipLo_(100).clipHi_(2000);
-            rotationSpeedBox.fixedWidth_(70).clipLo_(0.1).clipHi_(5.0);
-            zoomBox.fixedWidth_(70).clipLo_(0.25).clipHi_(4.0);
+					// Apply the change to the rotation angles
+					angleY = angleY + (deltaX * sensitivity);
+					angleX = angleX + (deltaY * sensitivity);
 
-            delay1Slider.value_(delaySpec.unmap(delayTime1));
-            trailSlider.value_(trailSpec.unmap(trailLength));
-            resolutionSlider.value_(resolutionSpec.unmap(resolution));
-            rotationSpeedSlider.value_(rotationSpeedSpec.unmap(rotationSpeed));
-            zoomSlider.value_(zoomSpec.unmap(zoom));
+					// Update the last position for the next movement calculation
+					lastMouseX = x;
+					lastMouseY = y;
+				};
+			};
 
-            dimensionMenu.value_(dimension - 2);
-            colorMenu.value_(colorChoice);
-            styleMenu.value_(drawStyle);
-            rateMenu.value_(if(bus.rate === \audio) { 0 } { 1 });
+			scopeView.mouseUpAction = {
+				// When the mouse is released, reset the tracking variables
+				lastMouseX = nil;
+				lastMouseY = nil;
+			};
+			// *** END: NEW MOUSE ACTIONS ***
 
-            idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
-            delay1Box.value_(delayTime1);
-            trailBox.value_(trailLength);
-            resolutionBox.value_(resolution);
-            rotationSpeedBox.value_(rotationSpeed);
-            zoomBox.value_(zoom);
 
-            view.layout =
-            VLayout(
-                HLayout(
-                    StaticText().string_("Dimension:"),
-                    dimensionMenu,
-                    StaticText().string_("Color:"),
-                    colorMenu,
-                    StaticText().string_("Style:"),
-                    styleMenu,
-                    [StaticText().string_("Input:"), align: \right],
-                    rateMenu,
-                    idxNumBox,
-                    nil
-                ).margins_(2).spacing_(4),
-                scopeView,
-                HLayout(
-                    StaticText().string_("Delay (Dt):").fixedWidth_(70),
-                    delay1Slider.maxHeight_(20),
-                    delay1Box
-                ).margins_(0).spacing_(4),
-                HLayout(
-                    StaticText().string_("Trail:").fixedWidth_(70),
-                    trailSlider.maxHeight_(20),
-                    trailBox
-                ).margins_(0).spacing_(4),
-                HLayout(
-                    StaticText().string_("Resolution:").fixedWidth_(70),
-                    resolutionSlider.maxHeight_(20),
-                    resolutionBox
-                ).margins_(0).spacing_(4),
-                HLayout(
-                    StaticText().string_("Rot Speed:").fixedWidth_(70),
-                    rotationSpeedSlider.maxHeight_(20),
-                    rotationSpeedBox
-                ).margins_(0).spacing_(4),
-                HLayout(
-                    StaticText().string_("Zoom:").fixedWidth_(70),
-                    zoomSlider.maxHeight_(20),
-                    zoomBox
-                ).margins_(0).spacing_(4)
-            ).margins_(2).spacing_(0);
+			delay1Slider = Slider().orientation_(\horizontal);
+			trailSlider = Slider().orientation_(\horizontal);
+			resolutionSlider = Slider().orientation_(\horizontal);
+			rotationSpeedSlider = Slider().orientation_(\horizontal);
+			zoomSlider = Slider().orientation_(\horizontal);
 
-            delay1Slider.action = { |me| setDelayTime1.value(delaySpec.map(me.value)) };
-            delay1Box.action = { |me| setDelayTime1.value(me.value) };
-            trailSlider.action = { |me| setTrailLength.value(trailSpec.map(me.value).asInteger) };
-            trailBox.action = { |me| setTrailLength.value(me.value) };
-            resolutionSlider.action = { |me| setResolution.value(resolutionSpec.map(me.value).asInteger) };
-            resolutionBox.action = { |me| setResolution.value(me.value) };
-            rotationSpeedSlider.action = { |me| setRotationSpeed.value(rotationSpeedSpec.map(me.value)) };
-            rotationSpeedBox.action = { |me| setRotationSpeed.value(me.value) };
-            zoomSlider.action = { |me| setZoom.value(zoomSpec.map(me.value)) };
-            zoomBox.action = { |me| setZoom.value(me.value) };
-            dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
-            colorMenu.action = { |me| setColor.value(me.value) };
-            styleMenu.action = { |me| setStyle.value(me.value) };
-            idxNumBox.action = { |me| setIndex.value(me.value) };
-            rateMenu.action = { |me| setRate.value(me.value) };
-            view.asView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
-            view.onClose = { view = nil; this.quit; };
+			dimensionMenu = PopUpMenu().items_(["2D", "3D", "4D", "5D", "6D"]);
+			colorMenu = PopUpMenu().items_(["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"]);
+			styleMenu = PopUpMenu().items_(["Lines", "Points", "Smooth", "Glow", "Ribbon", "Heat Map"]);
+			rateMenu = PopUpMenu().items_(["Audio", "Control"]);
 
-            if(window.notNil) { window.front };
-        };
+			autoRotateCheckBox = CheckBox().value_(autoRotate);
+
+			idxNumBox = NumberBox().decimals_(0).step_(1).scroll_step_(1);
+			delay1Box = NumberBox().decimals_(4).step_(0.0001).scroll_step_(0.0001);
+			trailBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
+			resolutionBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
+			rotationSpeedBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+			zoomBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+
+			gizmo = "999".bounds(idxNumBox.font).width + 20;
+			idxNumBox.fixedWidth = gizmo;
+			idxNumBox.align = \center;
+
+			delay1Box.fixedWidth_(70);
+			trailBox.fixedWidth_(70).clipLo_(10).clipHi_(5000);
+			resolutionBox.fixedWidth_(70).clipLo_(100).clipHi_(2000);
+			rotationSpeedBox.fixedWidth_(70).clipLo_(0.1).clipHi_(5.0);
+			zoomBox.fixedWidth_(70).clipLo_(0.25).clipHi_(4.0);
+
+			delay1Slider.value_(delaySpec.unmap(delayTime1));
+			trailSlider.value_(trailSpec.unmap(trailLength));
+			resolutionSlider.value_(resolutionSpec.unmap(resolution));
+			rotationSpeedSlider.value_(rotationSpeedSpec.unmap(rotationSpeed));
+			zoomSlider.value_(zoomSpec.unmap(zoom));
+
+			dimensionMenu.value_(dimension - 2);
+			colorMenu.value_(colorChoice);
+			styleMenu.value_(drawStyle);
+			rateMenu.value_(if(bus.rate === \audio) { 0 } { 1 });
+
+			idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
+			delay1Box.value_(delayTime1);
+			trailBox.value_(trailLength);
+			resolutionBox.value_(resolution);
+			rotationSpeedBox.value_(rotationSpeed);
+			zoomBox.value_(zoom);
+
+			view.layout =
+			VLayout(
+				HLayout(
+					StaticText().string_("Dimension:"),
+					dimensionMenu,
+					StaticText().string_("Color:"),
+					colorMenu,
+					StaticText().string_("Style:"),
+					styleMenu,
+					[StaticText().string_("Auto-Rotate:"), align: \right],
+					autoRotateCheckBox,
+					[StaticText().string_("Input:"), align: \right],
+					rateMenu,
+					idxNumBox,
+					nil
+				).margins_(2).spacing_(4), // Adjusted spacing for better look
+				scopeView,
+				HLayout(
+					StaticText().string_("Delay (Dt):").fixedWidth_(70),
+					delay1Slider.maxHeight_(20),
+					delay1Box
+				).margins_(0).spacing_(4),
+				HLayout(
+					StaticText().string_("Trail:").fixedWidth_(70),
+					trailSlider.maxHeight_(20),
+					trailBox
+				).margins_(0).spacing_(4),
+				HLayout(
+					StaticText().string_("Resolution:").fixedWidth_(70),
+					resolutionSlider.maxHeight_(20),
+					resolutionBox
+				).margins_(0).spacing_(4),
+				HLayout(
+					StaticText().string_("Rot Speed:").fixedWidth_(70),
+					rotationSpeedSlider.maxHeight_(20),
+					rotationSpeedBox
+				).margins_(0).spacing_(4),
+				HLayout(
+					StaticText().string_("Zoom:").fixedWidth_(70),
+					zoomSlider.maxHeight_(20),
+					zoomBox
+				).margins_(0).spacing_(4)
+			).margins_(2).spacing_(0);
+
+			delay1Slider.action = { |me| setDelayTime1.value(delaySpec.map(me.value)) };
+			delay1Box.action = { |me| setDelayTime1.value(me.value) };
+			trailSlider.action = { |me| setTrailLength.value(trailSpec.map(me.value).asInteger) };
+			trailBox.action = { |me| setTrailLength.value(me.value) };
+			resolutionSlider.action = { |me| setResolution.value(resolutionSpec.map(me.value).asInteger) };
+			resolutionBox.action = { |me| setResolution.value(me.value) };
+			rotationSpeedSlider.action = { |me| setRotationSpeed.value(rotationSpeedSpec.map(me.value)) };
+			rotationSpeedBox.action = { |me| setRotationSpeed.value(me.value) };
+			zoomSlider.action = { |me| setZoom.value(zoomSpec.map(me.value)) };
+			zoomBox.action = { |me| setZoom.value(me.value) };
+			autoRotateCheckBox.action = { |cb| setAutoRotate.value(cb.value) };
+			dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
+			colorMenu.action = { |me| setColor.value(me.value) };
+			styleMenu.action = { |me| setStyle.value(me.value) };
+			idxNumBox.action = { |me| setIndex.value(me.value) };
+			rateMenu.action = { |me| setRate.value(me.value) };
+			view.asView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
+			view.onClose = { view = nil; this.quit; };
+
+			if(window.notNil) { window.front };
+		};
 
         setDelayTime1 = { arg val;
             delayTime1 = delaySpec.constrain(val);
@@ -1037,8 +1083,15 @@ AttractorScope {
             );
             synth.setRate(val);
             idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
-            this.index = bus.index;
-        };
+			this.index = bus.index;
+		};
+
+		setAutoRotate = { arg bool;
+			autoRotate = bool;
+			if(autoRotateCheckBox.notNil) {
+				autoRotateCheckBox.value = autoRotate;
+			};
+		};
 
         updateColors = {
             // Keep current color choice
@@ -1846,27 +1899,26 @@ AttractorScope {
 
     keyDown { arg char, mod;
         case(
-            { char === $  }, { autoRotate = autoRotate.not },
-            { char === $+ }, { delay1Slider.increment; delay1Slider.doAction },
-            { char === $- }, { delay1Slider.decrement; delay1Slider.doAction },
-            { char === $[ }, { trailSlider.decrement; trailSlider.doAction },
-            { char === $] }, { trailSlider.increment; trailSlider.doAction },
+			{ char === $] }, { delay1Slider.increment; delay1Slider.doAction },
+			{ char === $[ }, { delay1Slider.decrement; delay1Slider.doAction },
+            { char === ${ }, { trailSlider.decrement; trailSlider.doAction },
+			{ char === $} }, { trailSlider.increment; trailSlider.doAction },
             { char === $< }, { resolutionSlider.decrement; resolutionSlider.doAction },
             { char === $> }, { resolutionSlider.increment; resolutionSlider.doAction },
             { char === $, }, { rotationSpeedSlider.decrement; rotationSpeedSlider.doAction },
-            { char === $/ }, { rotationSpeedSlider.increment; rotationSpeedSlider.doAction },
-            { char === $* }, { zoomSlider.increment; zoomSlider.doAction },
-            { char === $_ }, { zoomSlider.decrement; zoomSlider.doAction },
+            { char === $. }, { rotationSpeedSlider.increment; rotationSpeedSlider.doAction },
+			{ char === $= }, { zoomSlider.increment; zoomSlider.doAction },
+			{ char === $- }, { zoomSlider.decrement; zoomSlider.doAction },
             { char === $s }, { this.style = (drawStyle + 1) % 6 },
-            { char === $2 }, { this.dimension = 2 },
-            { char === $3 }, { this.dimension = 3 },
-            { char === $4 }, { this.dimension = 4 },
-            { char === $5 }, { this.dimension = 5 },
-            { char === $6 }, { this.dimension = 6 },
+            { char === $2 }, { setDimension.value(2) },
+            { char === $3 }, { setDimension.value(3) },
+            { char === $4 }, { setDimension.value(4) },
+            { char === $5 }, { setDimension.value(5) },
+            { char === $6 }, { setDimension.value(6) },
             { char === $m }, { this.toggleSize },
             { char === $r }, { this.resetView },
-            { char === $a }, { this.autoRotate = autoRotate.not },
-            { char === $c }, { this.clearPoints },
+            { char === $a }, { setAutoRotate.value(autoRotate.not) },
+            { char === $c }, { setColor.value((colorChoice + 1) % 13) },
             { ^false }
         );
         ^true;

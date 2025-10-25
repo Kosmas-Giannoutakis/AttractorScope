@@ -61,21 +61,49 @@ This process reveals the attractor geometry of the underlying dynamical system, 
 
 ## Installation
 
-Clone this repository into your **SuperCollider Extensions** directory.
+### Option 1: Install as Quark (Recommended)
 
-### **macOS**
+The easiest way to install AttractorScope is using SuperCollider's Quark system:
+
+```supercollider
+// Install from GitHub
+Quarks.install("https://github.com/Kosmas-Giannoutakis/AttractorScope.git");
+
+// Recompile the class library
+thisProcess.recompile;
+```
+
+That's it! AttractorScope is now ready to use.
+
+**To update later:**
+```supercollider
+Quarks.update("SurrealGenerativeMusic");
+thisProcess.recompile;
+```
+
+**To uninstall:**
+```supercollider
+Quarks.uninstall("SurrealGenerativeMusic");
+thisProcess.recompile;
+```
+
+### Option 2: Manual Installation
+
+Alternatively, you can manually clone the repository into your **SuperCollider Extensions** directory.
+
+#### **macOS**
 ```bash
 cd ~/Library/Application\ Support/SuperCollider/Extensions/
 git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git
 ```
 
-### **Linux**
+#### **Linux**
 ```bash
 cd ~/.local/share/SuperCollider/Extensions/
 git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git
 ```
 
-### **Windows**
+#### **Windows**
 ```bash
 cd "%AppData%\SuperCollider\Extensions"
 git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git

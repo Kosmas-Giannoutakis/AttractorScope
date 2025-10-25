@@ -77,13 +77,13 @@ That's it! AttractorScope is now ready to use.
 
 **To update later:**
 ```supercollider
-Quarks.update("SurrealGenerativeMusic");
+Quarks.update("AttractorScope");
 thisProcess.recompile;
 ```
 
 **To uninstall:**
 ```supercollider
-Quarks.uninstall("SurrealGenerativeMusic");
+Quarks.uninstall("AttractorScope");
 thisProcess.recompile;
 ```
 
@@ -94,19 +94,19 @@ Alternatively, you can manually clone the repository into your **SuperCollider E
 #### **macOS**
 ```bash
 cd ~/Library/Application\ Support/SuperCollider/Extensions/
-git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git
+git clone https://github.com/Kosmas-Giannoutakis/AttractorScope.git
 ```
 
 #### **Linux**
 ```bash
 cd ~/.local/share/SuperCollider/Extensions/
-git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git
+git clone https://github.com/Kosmas-Giannoutakis/AttractorScope.git
 ```
 
 #### **Windows**
 ```bash
 cd "%AppData%\SuperCollider\Extensions"
-git clone https://github.com/Kosmas-Giannoutakis/SurrealGenerativeMusic.git
+git clone https://github.com/Kosmas-Giannoutakis/AttractorScope.git
 ```
 
 Then recompile the SuperCollider class library:

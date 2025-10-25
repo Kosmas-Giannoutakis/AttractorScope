@@ -9,7 +9,7 @@ A real-time audio visualization tool for **SuperCollider** that generates attrac
 ## Overview
 
 **AttractorScope** is a visualization class for SuperCollider that transforms audio or control-rate signals into dynamic, multi-dimensional **phase-space embeddings**.
-By constructing delayed coordinate representations of input signals in 2D–6D space, it provides an intuitive way to observe the underlying structure, periodicity, and complexity of sound signals — concepts rooted in nonlinear dynamics and chaos theory.
+By constructing delayed coordinate representations of input signals in 2D–6D space, it provides an intuitive way to observe core concepts from nonlinear dynamics and chaos theory, such as the underlying structure, periodicity, and complexity of sound signals.
 
 This approach is based on **delay coordinate embedding**, a method introduced by **Packard et al. (1980)** and formalized by **Takens (1981)**.
 In this technique, a single time series is reconstructed in an N-dimensional phase space using time-delayed versions of the signal:
@@ -61,7 +61,7 @@ This process reveals the attractor geometry of the underlying dynamical system, 
 
 ## Installation
 
-Clone this repository into your **SuperCollider Extensions** directory, depending on your operating system.
+Clone this repository into your **SuperCollider Extensions** directory.
 
 ### **macOS**
 ```bash

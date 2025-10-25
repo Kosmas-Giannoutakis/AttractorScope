@@ -19,7 +19,7 @@ x(t) = [s(t), s(t - \tau), s(t - 2\tau), \dots, s(t - (N-1)\tau)]
 $$
 
 
-where \( s(t) \) is the signal, \( \tau \) is the delay time, and \( N \) is the embedding dimension.
+where $s(t)$ is the signal, $\tau$ is the delay time, and $N$ is the embedding dimension.
 This process reveals the attractor geometry of the underlying dynamical system, allowing visual analysis of periodic, quasi-periodic, and chaotic behaviors.
 
 **References:**

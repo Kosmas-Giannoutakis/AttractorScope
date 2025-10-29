@@ -113,8 +113,9 @@ x = {
     var freq = 120;
     var mod = SinOsc.kr(0.05).range(0, 2);
     var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
+	sig = LeakDC.ar(sig);
     LocalOut.ar(sig);
-    sig!2
+    sig
 }.play;
 
 // Visualize with custom parameters
@@ -247,12 +248,12 @@ Create a Lorenz-inspired oscillator with chaotic behavior.
 // Lorenz-inspired oscillator with chaos
 x = {
     var freq, sig1, sig2, mix;
-    
+
     // Two coupled oscillators with nonlinear feedback
     freq = LFNoise1.kr(2).range(100, 500);
     sig1 = SinOsc.ar(freq, LFNoise2.kr(0.5).range(0, 2pi));
     sig2 = SinOsc.ar(freq * 1.5, sig1 * 3);
-    
+
     mix = (sig1 * 0.7) + (sig2 * 0.3);
     mix * 0.3 ! 2
 }.play;

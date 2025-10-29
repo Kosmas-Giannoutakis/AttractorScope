@@ -34,7 +34,7 @@ AttractorScope {
     var <lineColor;
     var readTask;
     var prevPoints;
-	var pointInterpolation = 0.9;
+	var pointInterpolation = 0.7;
 
     *new {
         arg server, index = 0, bufsize = 4096,
@@ -117,29 +117,110 @@ AttractorScope {
 
         lineColor = Color.new255(255, 218, 0);
 
-        // OPTIMIZED: Helper function to pre-calculate colors
-        precalculateColors = { arg numPoints, fadeStart, fadeLength;
-            var colors;
+		// OPTIMIZED: Specialized color calculators for better performance
+		precalculateColors = { arg numPoints, fadeStart, fadeLength, screenPoints, originalPoints;
+			var colors;
 
-            // For static colors (0-8), pre-calculate and cache
-            if(colorChoice < 9) {
-                colors = Array.newClear(numPoints);
-                numPoints.do { |i|
-                    var alpha;
-                    if(i > fadeStart) {
-                        alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-                    } {
-                        alpha = 0.2;
-                    };
-                    colors[i] = lineColor.alpha_(alpha);
-                };
-            } {
-                // For dynamic colors (Rainbow/Velocity), return nil
-                colors = nil;
-            };
+			colors = Array.newClear(numPoints);
 
-            colors;
-        };
+			// Choose the fastest path based on color mode
+			colorChoice.switch(
+				9, {  // Rainbow - time calculated once
+					var timeOffset = (SystemClock.seconds * 0.1 % 1.0);
+					var hueStep = 1.0 / numPoints;  // Pre-calculate step
+
+					numPoints.do { |i|
+						var alpha, hue;
+						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+						hue = (i * hueStep + timeOffset) % 1.0;
+						colors[i] = Color.hsv(hue, 0.8, 1.0, alpha);
+					};
+				},
+				10, {  // Velocity - optimized distance calculation
+					numPoints.do { |i|
+						var alpha, hue, velocity, dx, dy;
+						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+
+						if(i > 0 and: { screenPoints.notNil }) {
+							// Direct calculation instead of .dist
+							dx = screenPoints[i].x - screenPoints[i-1].x;
+							dy = screenPoints[i].y - screenPoints[i-1].y;
+							velocity = sqrt((dx*dx) + (dy*dy));
+							hue = velocity.linlin(0, 50, 0.6, 0.0).clip(0, 1);
+						} {
+							hue = 0.6;
+						};
+						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+					};
+				},
+				11, {  // Distance from origin - optimized
+					numPoints.do { |i|
+						var alpha, hue, distance, pt;
+						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+
+						if(originalPoints.notNil and: { originalPoints[i].notNil }) {
+							pt = originalPoints[i];
+							// Direct calculation without collect/sum overhead
+							distance = switch(pt.size,
+								2, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1])) },
+								3, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2])) },
+								4, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3])) },
+								5, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4])) },
+								6, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4]) + (pt[5]*pt[5])) }
+							);
+							hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);
+						} {
+							hue = 0.5;
+						};
+						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+					};
+				},
+				12, {  // Curvature - optimized vector math
+					numPoints.do { |i|
+						var alpha, hue;
+						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+
+						if(i > 0 and: { i < (numPoints - 1) } and: { screenPoints.notNil }) {
+							var v1x, v1y, v2x, v2y, mag1, mag2, dot, angle, curvature;
+							var p0, p1, p2;  // Cache point lookups
+
+							p0 = screenPoints[i-1];
+							p1 = screenPoints[i];
+							p2 = screenPoints[i+1];
+
+							v1x = p1.x - p0.x;
+							v1y = p1.y - p0.y;
+							v2x = p2.x - p1.x;
+							v2y = p2.y - p1.y;
+
+							mag1 = sqrt((v1x*v1x) + (v1y*v1y));
+							mag2 = sqrt((v2x*v2x) + (v2y*v2y));
+
+							if(mag1 > 0.01 and: { mag2 > 0.01 }) {
+								dot = (v1x*v2x) + (v1y*v2y);
+								angle = acos((dot / (mag1 * mag2)).clip(-1, 1));
+								curvature = angle / pi;
+								hue = curvature.linlin(0, 0.5, 0.33, 0.0).clip(0, 1);
+							} {
+								hue = 0.33;
+							};
+						} {
+							hue = 0.33;
+						};
+						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+					};
+				},
+				{  // Static colors (0-8) - fastest path
+					var baseColor = lineColor;
+					numPoints.do { |i|
+						var alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+						colors[i] = baseColor.copy.alpha_(alpha);
+					};
+				}
+			);
+
+			colors;
+		};
 
         // OPTIMIZATION: Helper function to interpolate points between frames
         interpolatePoints = { arg screenPoints;
@@ -229,48 +310,23 @@ AttractorScope {
 			Pen.joinStyle = 1;
 			Pen.capStyle = 1;
 
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
+			// Pre-calculate ALL colors (including dynamic ones)
+			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
 
 			Pen.use {
-				if(colors.notNil) {
-					// Optimized: static colors - batch strokes
-					Pen.moveTo(interpolatedPoints[0]);
-					Pen.strokeColor = colors[0];
+				// All colors are now pre-calculated, so use the fast path
+				Pen.moveTo(interpolatedPoints[0]);
+				Pen.strokeColor = colors[0];
 
-					(numPoints - 1).do { |i|
-						var idx = i + 1;
-						Pen.lineTo(interpolatedPoints[idx]);
-						Pen.strokeColor = colors[idx];
-						if(i < (numPoints - 2)) {
-							Pen.stroke;
-							Pen.moveTo(interpolatedPoints[idx]);
-						} {
-							Pen.stroke;
-						};
-					};
-				} {
-					// Dynamic colors (Rainbow/Velocity)
-					interpolatedPoints.do { |pt, i|
-						var alpha, color;
-
-						if(i > fadeStart) {
-							alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-						} {
-							alpha = 0.2;
-						};
-
-						color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-						Pen.strokeColor = color.alpha_(alpha);
-
-						if(i == 0) {
-							Pen.moveTo(pt);
-						} {
-							Pen.lineTo(pt);
-							Pen.stroke;
-							if(i < (numPoints - 1)) {
-								Pen.moveTo(pt);
-							};
-						};
+				(numPoints - 1).do { |i|
+					var idx = i + 1;
+					Pen.lineTo(interpolatedPoints[idx]);
+					Pen.strokeColor = colors[idx];
+					if(i < (numPoints - 2)) {
+						Pen.stroke;
+						Pen.moveTo(interpolatedPoints[idx]);
+					} {
+						Pen.stroke;
 					};
 				};
 			};
@@ -279,29 +335,66 @@ AttractorScope {
 		drawPoints = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
 			var colors, pointSize;
 
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
-			pointSize = (2 * zoom).clip(1.5, 4.0);
+			pointSize = (3 * zoom).clip(2, 5.0);
 
-			// Render with pre-calculated colors (fast path)
-			if(colors.notNil) {
-				interpolatedPoints.do { |pt, i|
-					Pen.fillColor = colors[i];
-					Pen.fillOval(Rect(pt.x - (pointSize/2), pt.y - (pointSize/2), pointSize, pointSize));
-				};
-			} {
-				// Render with dynamic colors (Rainbow/Velocity)
-				interpolatedPoints.do { |pt, i|
-					var alpha, color;
+			// Pre-calculate ALL colors (including dynamic ones)
+			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
 
-					if(i > fadeStart) {
-						alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-					} {
-						alpha = 0.2;
+			// All colors pre-calculated - use fast rendering
+			interpolatedPoints.do { |pt, i|
+				Pen.fillColor = colors[i];
+				Pen.fillOval(Rect(pt.x - (pointSize/2), pt.y - (pointSize/2), pointSize, pointSize));
+			};
+		};
+
+		drawSmooth = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
+			var colors;
+
+			Pen.width = 2;
+			Pen.joinStyle = 1;
+			Pen.capStyle = 1;
+
+			if(numPoints < 4) {
+				// Fall back to simple lines for too few points
+				drawLines.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength);
+				^this;
+			};
+
+			// Pre-calculate ALL colors (including dynamic ones)
+			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+
+			Pen.use {
+				// All colors pre-calculated - draw Catmull-Rom splines
+				(numPoints - 1).do { |i|
+					var p0, p1, p2, p3, segments;
+
+					p0 = if(i > 0) { interpolatedPoints[i-1] } { interpolatedPoints[i] };
+					p1 = interpolatedPoints[i];
+					p2 = interpolatedPoints[i+1];
+					p3 = if(i < (numPoints - 2)) { interpolatedPoints[i+2] } { interpolatedPoints[i+1] };
+
+					segments = 6;  // OPTIMIZED: Reduced from 10
+
+					Pen.moveTo(p1);
+					segments.do { |t|
+						var tt = (t + 1) / segments;
+						var tt2 = tt * tt;
+						var tt3 = tt2 * tt;
+						var q1, q2, q3, q4, px, py;
+
+						q1 = tt3.neg + (2 * tt2) - tt;
+						q2 = (3 * tt3) - (5 * tt2) + 2;
+						q3 = (-3 * tt3) + (4 * tt2) + tt;
+						q4 = tt3 - tt2;
+
+						px = 0.5 * ((p0.x * q1) + (p1.x * q2) + (p2.x * q3) + (p3.x * q4));
+						py = 0.5 * ((p0.y * q1) + (p1.y * q2) + (p2.y * q3) + (p3.y * q4));
+
+						Pen.lineTo(Point(px, py));
 					};
 
-					color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-					Pen.fillColor = color.alpha_(alpha);
-					Pen.fillOval(Rect(pt.x - (pointSize/2), pt.y - (pointSize/2), pointSize, pointSize));
+					Pen.strokeColor = colors[i];
+					Pen.stroke;
 				};
 			};
 		};
@@ -311,61 +404,32 @@ AttractorScope {
 
 			// OPTIMIZED: Fewer glow levels for better performance
 			glowLevels = 3;
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
+
+			// Pre-calculate ALL colors (including dynamic ones)
+			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
 
 			Pen.use {
 				var coreSize;
 				glowLevels.do { |level|
-					// REDUCED: Smaller size multiplier (was 2.5, now 1.8)
+					// REDUCED: Smaller size multiplier
 					var size = (level + 1) * 1.8 * (zoom + 1);
 					// INCREASED: Higher alpha dropoff for sharper core
 					var alphaScale = (1 - (level / glowLevels)).pow(1.5) * 0.5;
 
-					if(colors.notNil) {
-						interpolatedPoints.do { |pt, i|
-							var glowColor = colors[i].copy;
-							glowColor.alpha = glowColor.alpha * alphaScale;
-							Pen.fillColor = glowColor;
-							Pen.fillOval(Rect(pt.x - (size/2), pt.y - (size/2), size, size));
-						};
-					} {
-						interpolatedPoints.do { |pt, i|
-							var alpha, color;
-
-							if(i > fadeStart) {
-								alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-							} {
-								alpha = 0.2;
-							};
-
-							color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-							Pen.fillColor = color.alpha_(alpha * alphaScale);
-							Pen.fillOval(Rect(pt.x - (size/2), pt.y - (size/2), size, size));
-						};
+					// All colors pre-calculated - use fast rendering
+					interpolatedPoints.do { |pt, i|
+						var glowColor = colors[i].copy;
+						glowColor.alpha = glowColor.alpha * alphaScale;
+						Pen.fillColor = glowColor;
+						Pen.fillOval(Rect(pt.x - (size/2), pt.y - (size/2), size, size));
 					};
 				};
 
 				// ADD: Bright core for sharpness
 				coreSize = 1.5;
-				if(colors.notNil) {
-					interpolatedPoints.do { |pt, i|
-						Pen.fillColor = colors[i];
-						Pen.fillOval(Rect(pt.x - (coreSize/2), pt.y - (coreSize/2), coreSize, coreSize));
-					};
-				} {
-					interpolatedPoints.do { |pt, i|
-						var alpha, color;
-
-						if(i > fadeStart) {
-							alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-						} {
-							alpha = 0.2;
-						};
-
-						color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-						Pen.fillColor = color.alpha_(alpha);
-						Pen.fillOval(Rect(pt.x - (coreSize/2), pt.y - (coreSize/2), coreSize, coreSize));
-					};
+				interpolatedPoints.do { |pt, i|
+					Pen.fillColor = colors[i];
+					Pen.fillOval(Rect(pt.x - (coreSize/2), pt.y - (coreSize/2), coreSize, coreSize));
 				};
 			};
 		};
@@ -377,73 +441,36 @@ AttractorScope {
 			Pen.joinStyle = 1;
 			Pen.capStyle = 1;
 
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
+			// Pre-calculate ALL colors (including dynamic ones)
+			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
 
 			Pen.use {
-				if(colors.notNil) {
-					// Optimized: static colors
-					(numPoints - 1).do { |i|
-						var p1, p2, perp, px, py, norm;
-						var ribbonColor;
+				// All colors pre-calculated - use fast rendering
+				(numPoints - 1).do { |i|
+					var p1, p2, perp, px, py, norm;
+					var ribbonColor;
 
-						p1 = interpolatedPoints[i];
-						p2 = interpolatedPoints[i+1];
+					p1 = interpolatedPoints[i];
+					p2 = interpolatedPoints[i+1];
 
-						// Calculate perpendicular vector
-						px = p2.y - p1.y;
-						py = (p2.x - p1.x).neg;
-						norm = sqrt((px*px) + (py*py));
+					// Calculate perpendicular vector
+					px = p2.y - p1.y;
+					py = (p2.x - p1.x).neg;
+					norm = sqrt((px*px) + (py*py));
 
-						if(norm > 0.01) {
-							px = (px / norm) * ribbonWidth;
-							py = (py / norm) * ribbonWidth;
+					if(norm > 0.01) {
+						px = (px / norm) * ribbonWidth;
+						py = (py / norm) * ribbonWidth;
 
-							ribbonColor = colors[i];
+						ribbonColor = colors[i];
 
-							// Draw ribbon as a quad
-							Pen.fillColor = ribbonColor;
-							Pen.moveTo(Point(p1.x - px, p1.y - py));
-							Pen.lineTo(Point(p1.x + px, p1.y + py));
-							Pen.lineTo(Point(p2.x + px, p2.y + py));
-							Pen.lineTo(Point(p2.x - px, p2.y - py));
-							Pen.fill;
-						};
-					};
-				} {
-					// Dynamic colors
-					(numPoints - 1).do { |i|
-						var p1, p2, perp, px, py, norm;
-						var alpha, color, ribbonColor;
-
-						p1 = interpolatedPoints[i];
-						p2 = interpolatedPoints[i+1];
-
-						// Calculate perpendicular vector
-						px = p2.y - p1.y;
-						py = (p2.x - p1.x).neg;
-						norm = sqrt((px*px) + (py*py));
-
-						if(norm > 0.01) {
-							px = (px / norm) * ribbonWidth;
-							py = (py / norm) * ribbonWidth;
-
-							if(i > fadeStart) {
-								alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-							} {
-								alpha = 0.2;
-							};
-
-							color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-							ribbonColor = color.alpha_(alpha);
-
-							// Draw ribbon as a quad
-							Pen.fillColor = ribbonColor;
-							Pen.moveTo(Point(p1.x - px, p1.y - py));
-							Pen.lineTo(Point(p1.x + px, p1.y + py));
-							Pen.lineTo(Point(p2.x + px, p2.y + py));
-							Pen.lineTo(Point(p2.x - px, p2.y - py));
-							Pen.fill;
-						};
+						// Draw ribbon as a quad
+						Pen.fillColor = ribbonColor;
+						Pen.moveTo(Point(p1.x - px, p1.y - py));
+						Pen.lineTo(Point(p1.x + px, p1.y + py));
+						Pen.lineTo(Point(p2.x + px, p2.y + py));
+						Pen.lineTo(Point(p2.x - px, p2.y - py));
+						Pen.fill;
 					};
 				};
 			};
@@ -494,100 +521,6 @@ AttractorScope {
 							Pen.fillColor = color;
 							Pen.fillRect(Rect(x * cellWidth, y * cellHeight, cellWidth, cellHeight));
 						};
-					};
-				};
-			};
-		};
-
-		drawSmooth = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors;
-
-			Pen.width = 2;
-			Pen.joinStyle = 1;
-			Pen.capStyle = 1;
-
-			if(numPoints < 4) {
-				// Fall back to simple lines for too few points
-				drawLines.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength);
-				^this;
-			};
-
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength);
-
-			Pen.use {
-				if(colors.notNil) {
-					// Static colors - draw Catmull-Rom splines
-					(numPoints - 1).do { |i|
-						var p0, p1, p2, p3, segments;
-
-						p0 = if(i > 0) { interpolatedPoints[i-1] } { interpolatedPoints[i] };
-						p1 = interpolatedPoints[i];
-						p2 = interpolatedPoints[i+1];
-						p3 = if(i < (numPoints - 2)) { interpolatedPoints[i+2] } { interpolatedPoints[i+1] };
-
-						segments = 6;  // OPTIMIZED: Reduced from 10
-
-						Pen.moveTo(p1);
-						segments.do { |t|
-							var tt = (t + 1) / segments;
-							var tt2 = tt * tt;
-							var tt3 = tt2 * tt;
-							var q1, q2, q3, q4, px, py;
-
-							q1 = tt3.neg + (2 * tt2) - tt;
-							q2 = (3 * tt3) - (5 * tt2) + 2;
-							q3 = (-3 * tt3) + (4 * tt2) + tt;
-							q4 = tt3 - tt2;
-
-							px = 0.5 * ((p0.x * q1) + (p1.x * q2) + (p2.x * q3) + (p3.x * q4));
-							py = 0.5 * ((p0.y * q1) + (p1.y * q2) + (p2.y * q3) + (p3.y * q4));
-
-							Pen.lineTo(Point(px, py));
-						};
-
-						Pen.strokeColor = colors[i];
-						Pen.stroke;
-					};
-				} {
-					// Dynamic colors
-					(numPoints - 1).do { |i|
-						var p0, p1, p2, p3, segments, alpha, color;
-
-						if(i > fadeStart) {
-							alpha = ((i - fadeStart) / fadeLength).pow(0.7);
-						} {
-							alpha = 0.2;
-						};
-
-						color = getPointColor.value(i, numPoints, interpolatedPoints, points);
-
-						p0 = if(i > 0) { interpolatedPoints[i-1] } { interpolatedPoints[i] };
-						p1 = interpolatedPoints[i];
-						p2 = interpolatedPoints[i+1];
-						p3 = if(i < (numPoints - 2)) { interpolatedPoints[i+2] } { interpolatedPoints[i+1] };
-
-						segments = 6;  // OPTIMIZED: Reduced from 10
-
-						Pen.moveTo(p1);
-						segments.do { |t|
-							var tt = (t + 1) / segments;
-							var tt2 = tt * tt;
-							var tt3 = tt2 * tt;
-							var q1, q2, q3, q4, px, py;
-
-							q1 = tt3.neg + (2 * tt2) - tt;
-							q2 = (3 * tt3) - (5 * tt2) + 2;
-							q3 = (-3 * tt3) + (4 * tt2) + tt;
-							q4 = tt3 - tt2;
-
-							px = 0.5 * ((p0.x * q1) + (p1.x * q2) + (p2.x * q3) + (p3.x * q4));
-							py = 0.5 * ((p0.y * q1) + (p1.y * q2) + (p2.y * q3) + (p3.y * q4));
-
-							Pen.lineTo(Point(px, py));
-						};
-
-						Pen.strokeColor = color.alpha_(alpha);
-						Pen.stroke;
 					};
 				};
 			};
@@ -840,6 +773,7 @@ AttractorScope {
 			scopeView = UserView();
 			scopeView.drawFunc = { this.draw };
 			scopeView.animate = true;
+			scopeView.frameRate = if(colorChoice < 9, { 30 }, { 20 });  // Lower FPS for dynamic colors
 			scopeView.frameRate = 30;
 			scopeView.minHeight_(500);
 			scopeView.canFocus = true;
@@ -1175,6 +1109,7 @@ AttractorScope {
     // OPTIMIZED: Improved buffer reading with better memory management
 	startReading {
 		var buffer, bufferDimension;
+		var isReading = false;  // Prevent overlapping reads
 
 		this.stopReading;
 
@@ -1188,7 +1123,10 @@ AttractorScope {
 
 		readTask = Routine({
 			inf.do {
-				if(buffer.notNil and: { buffer.numFrames.notNil }) {
+				// Only start new read if previous one completed
+				if(buffer.notNil and: { buffer.numFrames.notNil } and: { isReading.not }) {
+					isReading = true;
+
 					buffer.loadToFloatArray(action: { |data|
 						var numFrames = buffer.numFrames;
 						var readStep, sampleStep;
@@ -1239,10 +1177,12 @@ AttractorScope {
 								};
 							};
 						};
+
+						isReading = false;  // Mark read as complete
 					});
 				};
 
-				(1/30).wait;  // Read at 30Hz - 2× frame rate for smooth updates
+				(1/30).wait;  // Read at 60Hz for smoother updates
 			};
 		});
 

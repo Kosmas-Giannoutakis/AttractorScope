@@ -129,7 +129,7 @@ s.boot;
 a = AttractorScope(s, 0);
 ```
 
-### Noisy Phase Modulation Example
+### Noisy Phase Self-Modulation Example
 ```supercollider
 (
 // Noisy phase self-modulation

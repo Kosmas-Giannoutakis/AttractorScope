@@ -132,7 +132,7 @@ a = AttractorScope(s, 0);
 ### Noisy Phase Modulation Example
 ```supercollider
 (
-// Chaotic feedback oscillator
+// Noisy phase self-modulation
 x = {
     var fb = LocalIn.ar(2);
     var freq = 120;

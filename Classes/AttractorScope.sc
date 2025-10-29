@@ -944,17 +944,20 @@ AttractorScope {
         setDelayTime1 = { arg val;
             delayTime1 = delaySpec.constrain(val);
             delayTime2 = delayTime1 * 2;
-            delayTime3 = delayTime1 * 3;
-            delayTime4 = delayTime1 * 4;
-            delayTime5 = delayTime1 * 5;
+			delayTime3 = delayTime1 * 3;
+			delayTime4 = delayTime1 * 4;
+			delayTime5 = delayTime1 * 5;
 
-            synth.setDelayTime1(delayTime1);
-            synth.setDelayTime2(delayTime2);
-            synth.setDelayTime3(delayTime3);
-            synth.setDelayTime4(delayTime4);
-            synth.setDelayTime5(delayTime5);
-            delay1Box.value = delayTime1;
-            delay1Slider.value = delaySpec.unmap(delayTime1);
+			if(synth.notNil and: { synth.delaySynth.notNil }) {
+				synth.setDelayTime1(delayTime1);
+				synth.setDelayTime2(delayTime2);
+				synth.setDelayTime3(delayTime3);
+				synth.setDelayTime4(delayTime4);
+				synth.setDelayTime5(delayTime5);
+			};
+
+			if(delay1Box.notNil) { delay1Box.value = delayTime1 };
+			if(delay1Slider.notNil) { delay1Slider.value = delaySpec.unmap(delayTime1) };
         };
 
         setTrailLength = { arg val;
@@ -1011,24 +1014,26 @@ AttractorScope {
             this.run;
         };
 
-        setIndex = { arg i;
-            bus = Bus(bus.rate, i, 1, bus.server);
-            synth.setBusIndex(i);
-        };
+		setIndex = { arg i;
+			bus = Bus(bus.rate, i, 1, bus.server);
+			if(synth.notNil) { synth.setBusIndex(i) };
+		};
 
-        setRate = { arg val;
-            val.switch(
-                0, {
-                    bus = Bus(\audio, bus.index, 1, bus.server);
-                    busSpec = aBusSpec;
-                },
-                1, {
-                    bus = Bus(\control, bus.index, 1, bus.server);
-                    busSpec = cBusSpec;
-                }
-            );
-            synth.setRate(val);
-            idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
+		setRate = { arg val;
+			val.switch(
+				0, {
+					bus = Bus(\audio, bus.index, 1, bus.server);
+					busSpec = aBusSpec;
+				},
+				1, {
+					bus = Bus(\control, bus.index, 1, bus.server);
+					busSpec = cBusSpec;
+				}
+			);
+			if(synth.notNil) { synth.setRate(val) };
+			if(idxNumBox.notNil) {
+				idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
+			};
 			this.index = bus.index;
 		};
 
@@ -1053,10 +1058,29 @@ AttractorScope {
         this.run;
     }
 
+	quit {
+		this.stop;  // Stops reading task
+		synth.free; // Frees the AttractorScopeSynth completely
+		ServerTree.remove(this, server);
+		ServerQuit.remove(this, server);
+		if(window.notNil) { window.close };
+	}
+
+	free { this.quit }
+
+	doOnCmdPeriod {
+		// Stop reading immediately when synths are killed
+		if(readTask.notNil) { readTask.stop; readTask = nil };
+		points = [];  // Clear points since synth is dead
+	}
+
 	doOnServerTree {
 		synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3,
 			delayTime4, delayTime5, dimension, { |oldSynth, oldBuffer|
-				if(oldSynth.notNil) { oldSynth.free };
+				// Suppress errors before freeing (node might not exist after cmd+period)
+				if(oldSynth.notNil) {
+					server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
+				};
 				if(oldBuffer.notNil) { oldBuffer.free };
 				this.startReading;
 		});
@@ -1066,40 +1090,41 @@ AttractorScope {
 		if(readTask.notNil) { readTask.stop; readTask = nil };
 	}
 
-    run {
-        synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3, delayTime4, delayTime5, dimension, {
-            arg oldSynth, oldBuffer;
+	run {
+		synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3, delayTime4, delayTime5, dimension, {
+			arg oldSynth, oldBuffer;
 
-            if(view.notNil) {
-                var sampleRate = server.sampleRate;
-                var bufferFillTime;
+			if(view.notNil) {
+				var sampleRate = server.sampleRate;
+				var bufferFillTime;
 
-                if(sampleRate.isNil or: { sampleRate <= 0 }) {
-                    "WARNING: Sample rate not available, using default 44100".postln;
-                    sampleRate = 44100;
-                };
+				if(sampleRate.isNil or: { sampleRate <= 0 }) {
+					"WARNING: Sample rate not available, using default 44100".postln;
+					sampleRate = 44100;
+				};
 
-                bufferFillTime = (maxBufSize / sampleRate) * 2;
-                bufferFillTime = (bufferFillTime + maxDelayTime + 0.2).max(0.4);
+				bufferFillTime = (maxBufSize / sampleRate) * 2;
+				bufferFillTime = (bufferFillTime + maxDelayTime + 0.2).max(0.4);
 
-                "New dimension ready in %s...".format(bufferFillTime.round(0.01)).postln;
+				"New dimension ready in %s...".format(bufferFillTime.round(0.01)).postln;
 
-                AppClock.sched(bufferFillTime, {
-                    if(oldSynth.notNil) {
-                        server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
-                    };
-                    if(oldBuffer.notNil) {
-                        oldBuffer.free;
-                    };
+				AppClock.sched(bufferFillTime, {
+					// Suppress errors before freeing
+					if(oldSynth.notNil) {
+						server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
+					};
+					if(oldBuffer.notNil) {
+						oldBuffer.free;
+					};
 
-                    this.stopReading;
-                    points = [];
-                    this.startReading;
-                    "Switched to %D!".format(dimension).postln;
-                });
-            };
-        });
-    }
+					this.stopReading;
+					points = [];
+					this.startReading;
+					"Switched to %D!".format(dimension).postln;
+				});
+			};
+		});
+	}
 
     stop {
         this.stopReading;
@@ -1798,15 +1823,6 @@ AttractorScope {
             this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "6D");
         };
     }
-
-    quit {
-        synth.free;
-        ServerTree.remove(this, server);
-        ServerQuit.remove(this, server);
-        if(window.notNil) { window.close };
-    }
-
-    free { this.quit }
 
     index { ^bus.index }
     index_ { arg i; idxNumBox.value = i }

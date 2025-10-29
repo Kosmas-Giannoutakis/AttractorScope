@@ -23,7 +23,14 @@ AttractorScopeSynth {
         synth = nil;
         buffer = nil;
 
+        // Always stop and clear delaySynth reference
+        if(delaySynth.notNil) {
+            server.sendBundle(nil, ['/error', -1], [11, delaySynth.nodeID], ['/error', -2]);
+            delaySynth = nil;
+        };
+
         playThread = fork {
+            // Create delayBuses if needed
             if(delayBuses.isNil) {
                 delayBuses = Bus.audio(server, 6);
                 server.sync;
@@ -48,32 +55,21 @@ AttractorScopeSynth {
                 }).send(server);
 
                 server.sync;
-
-                delaySynth = Synth.head(server.defaultGroup, \attractorDelays, [
-                    \out, delayBuses.index,
-                    \busIndex, bus.index,
-                    \rate, if(\audio === bus.rate, 0, 1),
-                    \dt1, delayTime1,
-                    \dt2, delayTime2,
-                    \dt3, delayTime3,
-                    \dt4, delayTime4,
-                    \dt5, delayTime5
-                ]);
-
-                server.sync;
-            } {
-                delaySynth.set(
-                    \busIndex, bus.index,
-                    \rate, if(\audio === bus.rate, 0, 1),
-                    \dt1, delayTime1,
-                    \dt2, delayTime2,
-                    \dt3, delayTime3,
-                    \dt4, delayTime4,
-                    \dt5, delayTime5
-                );
-
-                server.sync;
             };
+
+            // Always create a fresh delaySynth
+            delaySynth = Synth.head(server.defaultGroup, \attractorDelays, [
+                \out, delayBuses.index,
+                \busIndex, bus.index,
+                \rate, if(\audio === bus.rate, 0, 1),
+                \dt1, delayTime1,
+                \dt2, delayTime2,
+                \dt3, delayTime3,
+                \dt4, delayTime4,
+                \dt5, delayTime5
+            ]);
+
+            server.sync;
 
             buffer = Buffer.alloc(server, bufSize, dimension);
             server.sync;
@@ -150,6 +146,10 @@ AttractorScopeSynth {
             server.sendBundle(nil, ['/error', -1], [11, synth.nodeID], ['/error', -2]);
             synth = nil;
         };
+        if(delaySynth.notNil) {
+            server.sendBundle(nil, ['/error', -1], [11, delaySynth.nodeID], ['/error', -2]);
+            delaySynth = nil;
+        };
     }
 
     isRunning { ^playThread.notNil }
@@ -174,11 +174,6 @@ AttractorScopeSynth {
 
     free {
         this.stop;
-
-        if(delaySynth.notNil) {
-            delaySynth.free;
-            delaySynth = nil;
-        };
 
         if(delayBuses.notNil) {
             delayBuses.free;

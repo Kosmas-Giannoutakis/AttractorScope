@@ -133,13 +133,14 @@ a = AttractorScope(s, 0);
 ```supercollider
 (
 // Chaotic feedback oscillator
-{
+x = {
     var fb = LocalIn.ar(2);
     var freq = 120;
-    var mod = SinOsc.kr(0.05).range(0, 2); // slow morph control
+    var mod = SinOsc.kr(0.05).range(0, 2.5);
     var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
+    sig = LeakDC.ar(sig);
     LocalOut.ar(sig);
-    sig!2
+    sig
 }.play;
 
 // Visualize it

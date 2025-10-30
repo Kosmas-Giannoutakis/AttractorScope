@@ -13,7 +13,7 @@ AttractorScope {
 
     var <window, <view, <scopeView;
     var delay1Slider, trailSlider, resolutionSlider, rotationSpeedSlider, zoomSlider;
-    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu, autoRotateCheckBox;
+    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu, autoRotateCheckBox, exportButton;
 
     var <server, synth;
     var maxDelayTime, maxBufSize;
@@ -34,7 +34,7 @@ AttractorScope {
     var <lineColor;
     var readTask;
     var prevPoints;
-	var pointInterpolation = 0.7;
+	var pointInterpolation = 0.9;
 
     *new {
         arg server, index = 0, bufsize = 4096,
@@ -88,7 +88,7 @@ AttractorScope {
         colorChoice = 0;
         drawStyle = 0;
 
-        smallSize = Size(800, 830);
+        smallSize = Size(810, 830);
         largeSize = Size(1100, 1130);
 
         angleX = 0.6;
@@ -832,6 +832,7 @@ AttractorScope {
 			rateMenu = PopUpMenu().items_(["Audio", "Control"]);
 
 			autoRotateCheckBox = CheckBox().value_(autoRotate);
+			exportButton = Button().states_([["Export JPG", Color.black, Color.gray(0.9)]]).maxWidth_(100);
 
 			idxNumBox = NumberBox().decimals_(0).step_(1).scroll_step_(1);
 			delay1Box = NumberBox().decimals_(4).step_(0.0001).scroll_step_(0.0001);
@@ -882,6 +883,7 @@ AttractorScope {
 					[StaticText().string_("Input:"), align: \right],
 					rateMenu,
 					idxNumBox,
+					exportButton,
 					nil
 				).margins_(2).spacing_(4), // Adjusted spacing for better look
 				scopeView,
@@ -930,6 +932,7 @@ AttractorScope {
 			zoomSlider.mouseUpAction = { scopeView.focus };
 			zoomBox.action = { |me| setZoom.value(me.value) };
 			autoRotateCheckBox.action = { |cb| setAutoRotate.value(cb.value) };
+			exportButton.action = { this.exportScreenshot };
 			dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
 			colorMenu.action = { |me| setColor.value(me.value) };
 			styleMenu.action = { |me| setStyle.value(me.value) };
@@ -1886,6 +1889,33 @@ AttractorScope {
         };
     }
 
+	exportScreenshot {
+		var img, filename, timestamp, filepath, picturesDir;
+
+		if(scopeView.isNil) {
+			"Cannot export: scopeView is not available".postln;
+			^this;
+		};
+
+		try {
+			timestamp = Date.getDate.format("%Y%m%d_%H%M%S");
+			filename = "AttractorScope_" ++ dimension ++ "D_" ++ timestamp ++ ".png";
+
+			// Save to Pictures folder (cross-platform)
+			picturesDir = Platform.userHomeDir +/+ "Pictures";
+			filepath = picturesDir +/+ filename;
+
+			img = Image.fromWindow(scopeView);
+			img.write(filepath, "png");  // PNG is lossless - no quality parameter needed
+			img.free;
+
+			("Screenshot saved: " ++ filename).postln;
+			("Saved to: " ++ filepath).postln;
+		} {
+			"Error exporting screenshot".postln;
+		};
+	}
+
     keyDown { arg char, mod;
         case(
 			{ char === $] }, { delay1Slider.increment; delay1Slider.doAction },
@@ -1908,6 +1938,7 @@ AttractorScope {
             { char === $r }, { this.resetAll },
             { char === $a }, { setAutoRotate.value(autoRotate.not) },
             { char === $c }, { setColor.value((colorChoice + 1) % 13) },
+			{ char === $e }, { this.exportScreenshot },
             { ^false }
         );
         ^true;

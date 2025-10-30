@@ -148,6 +148,35 @@ a = AttractorScope(s, 0, dimension: 3, trailLength: 1000, resolution: 1000);
 )
 ```
 
+### Polyrhythmic Harmonic Series with Synchronized Modulation Example
+```supercollider
+(
+x = {
+    var fundamental = 60;
+    var baseModRate = 1/8;  // Base modulation rate in Hz
+    var sig = Mix.fill(16, { |i|
+        var harmonic = i + 1;
+        var freq = fundamental * harmonic;
+        var modRate = baseModRate * harmonic;  // Each harmonic modulated proportionally faster
+        var ampMod = SinOsc.kr(modRate).range(0, 1);  // Amplitude modulator
+        var amp = (1 / harmonic) * ampMod;  // Diminishing amplitude with modulation
+        SinOsc.ar(freq, 0, amp)
+    });
+    sig ! 2
+}.play;
+
+// Visualize in 4D with longer trail
+a = AttractorScope(
+    server: s,
+    index: 0,
+    dimension: 4,
+    trailLength: 3000,
+    resolution: 2000,
+    delayTime1: 0.015
+);
+)
+```
+
 ### Custom Parameters
 ```supercollider
 a = AttractorScope(
@@ -178,6 +207,26 @@ You can manually control the rotation of the visualization in 3D and higher dime
 
 ---
 
+### Screenshot Export
+
+AttractorScope can capture high-quality screenshots of your visualizations.
+
+**How to Export:**
+- Press **`e`** key, or
+- Click the **"Export PNG"** button in the GUI
+
+**Output:**
+- **Format:** PNG (lossless quality)
+- **Location:** Saved to your `Pictures` folder
+- **Filename:** Automatically timestamped as `AttractorScope_[dimension]D_[timestamp].png`
+  - Example: `AttractorScope_3D_20241030_143022.png`
+
+The screenshot captures only the visualization area (black canvas with attractor), excluding GUI controls for clean exports.
+
+**Note:** The file path is printed to the Post Window after each successful export.
+
+---
+
 ## Keyboard Shortcuts
 
 | Key | Function |
@@ -193,6 +242,7 @@ You can manually control the rotation of the visualization in 3D and higher dime
 | **`<`** / **`>`** | Decrease / Increase the **Resolution**. |
 | **`,`** / **`.`** | Decrease / Increase the **Rotation Speed**. |
 | **`-`** / **`=`** | Decrease / Increase the **Zoom** level. |
+| **`e`** | **Export** a PNG screenshot of the current visualization to your Pictures folder. |
 
 ---
 

@@ -82,16 +82,9 @@ An optional parent link::Classes/View:: to embed the scope into. If code::nil::,
 EXAMPLES::
 
 code::
-1. Basic Usage
-
-Boot the server and create a simple visualization.
+// 1. Simple sine wave test
 
 (
-s.boot;
-)
-
-(
-// Simple sine wave test
 { SinOsc.ar(440) * 0.5 }.play;
 
 // Create an AttractorScope on audio bus 0
@@ -102,18 +95,16 @@ a.quit;
 ::
 
 code::
-2. Chaotic Feedback Oscillator
-
-Create a chaotic feedback system with custom visualization parameters.
+//2. Chaotic Feedback Oscillator
 
 (
-// Create a chaotic feedback system
+// Noisy phase self-modulation
 x = {
     var fb = LocalIn.ar(2);
     var freq = 120;
     var mod = SinOsc.kr(0.05).range(0, 2.5);
     var sig = SinOsc.ar(freq, fb * mod, 1, fb * 0.5);
-	sig = LeakDC.ar(sig);
+    sig = LeakDC.ar(sig);
     LocalOut.ar(sig);
     sig
 }.play;
@@ -134,48 +125,20 @@ a.quit;
 ::
 
 code::
-3. Exploring Different Delay Times
-
-Experiment with different delay times to see how the attractor structure changes.
+// 3. Polyrhythmic harmonic series with synchronized modulation
 
 (
-// Play a simple tone
-{ SinOsc.ar(200) * 0.3 ! 2 }.play;
-
-// Create scope
-a = AttractorScope(s, 0, dimension: 3);
-)
-
-// Try different delay times by using keyboard shortcuts
-// Press [ and ] to decrease/increase delay time
-// Or set directly:
-
-// Very short delay - tight circle
-a.delayTime1 = 0.002;
-
-// Medium delay - interesting Lissajous-like patterns
-a.delayTime1 = 0.01;
-
-// Longer delay - larger, more spread out structures
-a.delayTime1 = 0.03;
-::
-
-code::
-4. Complex Multi-Oscillator System
-
-Visualize multiple oscillators with slow modulation in higher dimensions.
-
-(
-// Multiple oscillators with slow modulation
 x = {
-    var freqs = [100, 150.3, 200.7];
-    var sig = Mix(
-        SinOsc.ar(
-            freqs * LFNoise1.kr([0.1, 0.15, 0.2]).range(0.98, 1.02),
-            0,
-            0.2
-        )
-    );
+    var fundamental = 60;
+    var baseModRate = 1/8;  // Base modulation rate in Hz
+    var sig = Mix.fill(16, { |i|
+        var harmonic = i + 1;
+        var freq = fundamental * harmonic;
+        var modRate = baseModRate * harmonic;  // Each harmonic modulated proportionally faster
+        var ampMod = SinOsc.kr(modRate).range(0, 1);  // Amplitude modulator
+        var amp = (1 / harmonic) * ampMod;  // Diminishing amplitude with modulation
+        SinOsc.ar(freq, 0, amp)
+    });
     sig ! 2
 }.play;
 
@@ -184,152 +147,10 @@ a = AttractorScope(
     server: s,
     index: 0,
     dimension: 4,
-    trailLength: 1500,
-    resolution: 1000,
+    trailLength: 3000,
+    resolution: 2000,
     delayTime1: 0.015
 );
-)
-
-// Try different visualization styles using keyboard
-// Press 's' to cycle through styles: Lines, Points, Smooth, Glow, Ribbon, Heat Map
-
-// Or set directly:
-a.style = 3; // Glow
-a.style = 4; // Ribbon
-a.style = 5; // Heat Map
-
-// Try different color schemes using keyboard
-// Press 'c' to cycle through colors
-
-// Or set directly:
-a.color = 9;  // Rainbow
-a.color = 10; // Velocity
-a.color = 11; // Distance
-a.color = 12; // Curvature
-
-x.free;
-a.quit;
-::
-
-code::
-5. Analyzing Noise
-
-Compare how different types of noise appear in phase space.
-
-(
-// Pink noise
-{ PinkNoise.ar(0.3) ! 2 }.play;
-
-// Higher dimension often reveals structure in noise
-a = AttractorScope(
-    server: s,
-    index: 0,
-    dimension: 5,
-    trailLength: 2000,
-    resolution: 1200
-);
-)
-
-// Compare with white noise
-{ WhiteNoise.ar(0.3) ! 2 }.play;
-
-// And with filtered noise
-{ Resonz.ar(WhiteNoise.ar, 800, 0.1) * 5 ! 2 }.play;
-
-a.quit;
-::
-
-code::
-6. Lorenz-like Attractor
-
-Create a Lorenz-inspired oscillator with chaotic behavior.
-
-(
-// Lorenz-inspired oscillator with chaos
-x = {
-    var freq, sig1, sig2, mix;
-
-    // Two coupled oscillators with nonlinear feedback
-    freq = LFNoise1.kr(2).range(100, 500);
-    sig1 = SinOsc.ar(freq, LFNoise2.kr(0.5).range(0, 2pi));
-    sig2 = SinOsc.ar(freq * 1.5, sig1 * 3);
-
-    mix = (sig1 * 0.7) + (sig2 * 0.3);
-    mix * 0.3 ! 2
-}.play;
-
-// Visualize with optimal settings for chaos
-a = AttractorScope(
-    server: s,
-    index: 0,
-    dimension: 3,
-    trailLength: 1500,
-    resolution: 1000,
-    delayTime1: 0.015,
-    rotationSpeed: 0.5
-);
-
-// Use rainbow coloring to see trajectory evolution
-a.color = 9;
-)
-
-x.free;
-a.quit;
-::
-
-code::
-7. Control Rate Signals
-
-Visualize control-rate signals with appropriate delay settings.
-
-(
-// Control rate LFO
-b = Bus.control(s, 1);
-
-x = {
-    var lfo = LFNoise1.kr(5).range(-1, 1);
-    Out.kr(b, lfo);
-}.play;
-
-// Visualize control-rate bus
-a = AttractorScope(
-    server: s,
-    index: b,
-    rate: \control,
-    dimension: 2,
-    trailLength: 300,
-    delayTime1: 0.05  // Longer delay for slower control rate
-);
-)
-
-x.free;
-a.quit;
-b.free;
-::
-
-code::
-8. Embedding in a Custom GUI
-
-Embed AttractorScope into a custom window with other controls.
-
-(
-// Create a custom window
-w = Window("Custom Attractor", Rect(100, 100, 600, 650)).front;
-w.view.decorator = FlowLayout(w.view.bounds);
-
-// Add some controls
-StaticText(w, 580@20).string_("Custom Attractor Visualization");
-
-// Create AttractorScope embedded in the window
-a = AttractorScope(
-    server: s,
-    index: 0,
-    dimension: 3,
-    view: w.view  // Embed in our custom window
-);
-
-// Play some audio
-x = { SinOsc.ar(LFNoise1.kr(1).range(200, 800)) * 0.3 ! 2 }.play;
 )
 
 x.free;

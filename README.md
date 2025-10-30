@@ -160,7 +160,7 @@ x = {
         var modRate = baseModRate * harmonic;  // Each harmonic modulated proportionally faster
         var ampMod = SinOsc.kr(modRate).range(0, 1);  // Amplitude modulator
         var amp = (1 / harmonic) * ampMod;  // Diminishing amplitude with modulation
-        SinOsc.ar(freq, 0, amp)
+        SinOsc.ar(freq, 0, amp * 0.5)
     });
     sig ! 2
 }.play;

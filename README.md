@@ -263,16 +263,24 @@ The screenshot captures only the visualization area (black canvas with attractor
 | `zoom` | Float | 0.25–4.0 | 1.0 | Initial zoom level |
 | `rate` | Symbol | - | `\audio` | Bus rate: `\audio` or `\control` |
 
-### Delay Times
-The scope uses multiple delayed versions of the input signal as coordinates:
-- `delayTime1`: First delay (base)
-- `delayTime2`: Second delay (2× base)
-- `delayTime3`: Third delay (3× base)
-- `delayTime4`: Fourth delay (4× base)
-- `delayTime5`: Fifth delay (5× base)
+### Choosing Embedding Parameters
 
-Different delay values shape the attractor differently. Try values between 0.001 and 0.1 seconds.
+The quality of attractor reconstruction depends on two key parameters:
 
+**Delay Time (τ):**
+- Determines temporal spacing between coordinates
+- **Too small**: coordinates are redundant (attractor collapses)
+- **Too large**: coordinates are uncorrelated (structure is lost)
+- **General guideline**: Start with 0.005–0.02s for audio signals
+- **For periodic signals**: Use 1/10 to 1/4 of the period
+- **For complex signals**: Adjust until clear structure emerges
+
+**Embedding Dimension (N):**
+- Must be high enough to "unfold" the attractor without false overlaps
+- **N = 2**: Simple periodic signals only
+- **N = 3**: Most audio signals (good default)
+- **N = 4–5**: Complex or chaotic signals
+- **N = 6**: Rarely needed, very high-dimensional dynamics
 ---
 
 ## Technical Details

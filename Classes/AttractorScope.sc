@@ -9,7 +9,7 @@ AttractorScope {
     var rotate6D_XW, rotate6D_YW, rotate6D_ZW, rotate6D_XV, rotate6D_YV, rotate6D_ZV, project6Dto5D;
     var drawLines, drawPoints, drawGlow, drawRibbon, drawHeatMap, drawSmooth;
     var getPointColor, precalculateColors;
-	var interpolatePoints;
+    var interpolatePoints;
 
     var <window, <view, <scopeView;
     var delay1Slider, trailSlider, resolutionSlider, rotationSpeedSlider, zoomSlider;
@@ -28,13 +28,13 @@ AttractorScope {
     var <angle6D_XW, <angle6D_YW, <angle6D_ZW, <angle6D_XV, <angle6D_YV, <angle6D_ZV;
     var <scale, baseScale, <zoom;
     var <autoRotate;
-	var <lastMouseX, <lastMouseY;
+    var <lastMouseX, <lastMouseY;
     var sizeToggle = false;
     var points;
     var <lineColor;
     var readTask;
     var prevPoints;
-	var pointInterpolation = 0.9;
+    var pointInterpolation = 0.9;
 
     *new {
         arg server, index = 0, bufsize = 4096,
@@ -110,128 +110,130 @@ AttractorScope {
         baseScale = 150;
         scale = baseScale * zoom;
         autoRotate = true;
-		lastMouseX = nil;
+        lastMouseX = nil;
         lastMouseY = nil;
         points = [];
         prevPoints = [];
 
         lineColor = Color.new255(255, 218, 0);
 
-		// OPTIMIZED: Specialized color calculators for better performance
-		precalculateColors = { arg numPoints, fadeStart, fadeLength, screenPoints, originalPoints;
-			var colors;
+        // Proper trail fade using pow - newest points are brightest
+        precalculateColors = { arg numPoints, screenPoints, originalPoints;
+            var colors;
 
-			colors = Array.newClear(numPoints);
+            colors = Array.newClear(numPoints);
 
-			// Choose the fastest path based on color mode
-			colorChoice.switch(
-				9, {  // Rainbow - time calculated once
-					var timeOffset = (SystemClock.seconds * 0.1 % 1.0);
-					var hueStep = 1.0 / numPoints;  // Pre-calculate step
+            // Choose the fastest path based on color mode
+            colorChoice.switch(
+                9, {  // Rainbow
+                    var timeOffset = (SystemClock.seconds * 0.1 % 1.0);
+                    var hueStep = 1.0 / numPoints;
 
-					numPoints.do { |i|
-						var alpha, hue;
-						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
-						hue = (i * hueStep + timeOffset) % 1.0;
-						colors[i] = Color.hsv(hue, 0.8, 1.0, alpha);
-					};
-				},
-				10, {  // Velocity - optimized distance calculation
-					numPoints.do { |i|
-						var alpha, hue, velocity, dx, dy;
-						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+                    numPoints.do { |i|
+                        var alpha, hue, t;
+                        t = i / (numPoints - 1);  // 0.0 to 1.0
+                        alpha = t.pow(0.5);  // Pow fade
+                        hue = (i * hueStep + timeOffset) % 1.0;
+                        colors[i] = Color.hsv(hue, 0.8, 1.0, alpha);
+                    };
+                },
+                10, {  // Velocity
+                    numPoints.do { |i|
+                        var alpha, hue, velocity, dx, dy, t;
+                        t = i / (numPoints - 1);
+                        alpha = t.pow(0.5);  // Pow fade
 
-						if(i > 0 and: { screenPoints.notNil }) {
-							// Direct calculation instead of .dist
-							dx = screenPoints[i].x - screenPoints[i-1].x;
-							dy = screenPoints[i].y - screenPoints[i-1].y;
-							velocity = sqrt((dx*dx) + (dy*dy));
-							hue = velocity.linlin(0, 50, 0.6, 0.0).clip(0, 1);
-						} {
-							hue = 0.6;
-						};
-						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
-					};
-				},
-				11, {  // Distance from origin - optimized
-					numPoints.do { |i|
-						var alpha, hue, distance, pt;
-						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+                        if(i > 0 and: { screenPoints.notNil }) {
+                            dx = screenPoints[i].x - screenPoints[i-1].x;
+                            dy = screenPoints[i].y - screenPoints[i-1].y;
+                            velocity = sqrt((dx*dx) + (dy*dy));
+                            hue = velocity.linlin(0, 50, 0.6, 0.0).clip(0, 1);
+                        } {
+                            hue = 0.6;
+                        };
+                        colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+                    };
+                },
+                11, {  // Distance from origin
+                    numPoints.do { |i|
+                        var alpha, hue, distance, pt, t;
+                        t = i / (numPoints - 1);
+                        alpha = t.pow(0.5);  // Pow fade
 
-						if(originalPoints.notNil and: { originalPoints[i].notNil }) {
-							pt = originalPoints[i];
-							// Direct calculation without collect/sum overhead
-							distance = switch(pt.size,
-								2, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1])) },
-								3, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2])) },
-								4, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3])) },
-								5, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4])) },
-								6, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4]) + (pt[5]*pt[5])) }
-							);
-							hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);
-						} {
-							hue = 0.5;
-						};
-						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
-					};
-				},
-				12, {  // Curvature - optimized vector math
-					numPoints.do { |i|
-						var alpha, hue;
-						alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
+                        if(originalPoints.notNil and: { originalPoints[i].notNil }) {
+                            pt = originalPoints[i];
+                            distance = switch(pt.size,
+                                2, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1])) },
+                                3, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2])) },
+                                4, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3])) },
+                                5, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4])) },
+                                6, { sqrt((pt[0]*pt[0]) + (pt[1]*pt[1]) + (pt[2]*pt[2]) + (pt[3]*pt[3]) + (pt[4]*pt[4]) + (pt[5]*pt[5])) }
+                            );
+                            hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);
+                        } {
+                            hue = 0.5;
+                        };
+                        colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+                    };
+                },
+                12, {  // Curvature
+                    numPoints.do { |i|
+                        var alpha, hue, t;
+                        t = i / (numPoints - 1);
+                        alpha = t.pow(0.5);  // Pow fade
 
-						if(i > 0 and: { i < (numPoints - 1) } and: { screenPoints.notNil }) {
-							var v1x, v1y, v2x, v2y, mag1, mag2, dot, angle, curvature;
-							var p0, p1, p2;  // Cache point lookups
+                        if(i > 0 and: { i < (numPoints - 1) } and: { screenPoints.notNil }) {
+                            var v1x, v1y, v2x, v2y, mag1, mag2, dot, angle, curvature;
+                            var p0, p1, p2;
 
-							p0 = screenPoints[i-1];
-							p1 = screenPoints[i];
-							p2 = screenPoints[i+1];
+                            p0 = screenPoints[i-1];
+                            p1 = screenPoints[i];
+                            p2 = screenPoints[i+1];
 
-							v1x = p1.x - p0.x;
-							v1y = p1.y - p0.y;
-							v2x = p2.x - p1.x;
-							v2y = p2.y - p1.y;
+                            v1x = p1.x - p0.x;
+                            v1y = p1.y - p0.y;
+                            v2x = p2.x - p1.x;
+                            v2y = p2.y - p1.y;
 
-							mag1 = sqrt((v1x*v1x) + (v1y*v1y));
-							mag2 = sqrt((v2x*v2x) + (v2y*v2y));
+                            mag1 = sqrt((v1x*v1x) + (v1y*v1y));
+                            mag2 = sqrt((v2x*v2x) + (v2y*v2y));
 
-							if(mag1 > 0.01 and: { mag2 > 0.01 }) {
-								dot = (v1x*v2x) + (v1y*v2y);
-								angle = acos((dot / (mag1 * mag2)).clip(-1, 1));
-								curvature = angle / pi;
-								hue = curvature.linlin(0, 0.5, 0.33, 0.0).clip(0, 1);
-							} {
-								hue = 0.33;
-							};
-						} {
-							hue = 0.33;
-						};
-						colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
-					};
-				},
-				{  // Static colors (0-8) - fastest path
-					var baseColor = lineColor;
-					numPoints.do { |i|
-						var alpha = if(i > fadeStart, { ((i - fadeStart) / fadeLength).pow(0.7) }, { 0.2 });
-						colors[i] = baseColor.copy.alpha_(alpha);
-					};
-				}
-			);
+                            if(mag1 > 0.01 and: { mag2 > 0.01 }) {
+                                dot = (v1x*v2x) + (v1y*v2y);
+                                angle = acos((dot / (mag1 * mag2)).clip(-1, 1));
+                                curvature = angle / pi;
+                                hue = curvature.linlin(0, 0.5, 0.33, 0.0).clip(0, 1);
+                            } {
+                                hue = 0.33;
+                            };
+                        } {
+                            hue = 0.33;
+                        };
+                        colors[i] = Color.hsv(hue, 0.9, 1.0, alpha);
+                    };
+                },
+                {  // Static colors (0-8)
+                    var baseColor = lineColor;
+                    numPoints.do { |i|
+                        var alpha, t;
+                        t = i / (numPoints - 1);
+                        alpha = t.pow(0.5);  // Pow fade
+                        colors[i] = baseColor.copy.alpha_(alpha);
+                    };
+                }
+            );
 
-			colors;
-		};
+            colors;
+        };
 
-        // OPTIMIZATION: Helper function to interpolate points between frames
+        // Helper function to interpolate points between frames
         interpolatePoints = { arg screenPoints;
             var interpolatedPoints;
 
-            // Initialize prevPoints if empty or size changed
             if(prevPoints.size != screenPoints.size) {
                 prevPoints = screenPoints.copy;
             };
 
-            // Interpolate for smooth motion
             interpolatedPoints = screenPoints.collect { |pt, i|
                 var prevPt = prevPoints[i] ? pt;
                 Point(
@@ -244,7 +246,7 @@ AttractorScope {
             interpolatedPoints;
         };
 
-        // Function to get color for a point based on colorChoice
+        // Function to get color for a point (kept for compatibility)
         getPointColor = { arg i, numPoints, screenPoints, originalPoints;
             var baseAlpha, hue, velocity, distance, curvature;
             var v1x, v1y, v2x, v2y, angle, dot, mag1, mag2;
@@ -266,7 +268,7 @@ AttractorScope {
                 11, {  // Distance from origin
                     if(originalPoints.notNil and: { originalPoints[i].notNil }) {
                         distance = sqrt(originalPoints[i].collect({ |v| v*v }).sum);
-                        hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);  // Blue (near) to Red (far)
+                        hue = distance.linlin(0, 1, 0.66, 0.0).clip(0, 1);
                     } {
                         hue = 0.5;
                     };
@@ -274,7 +276,6 @@ AttractorScope {
                 },
                 12, {  // Curvature
                     if(i > 0 and: { i < (screenPoints.size - 1) }) {
-                        // Calculate angle between two consecutive segments
                         v1x = screenPoints[i].x - screenPoints[i-1].x;
                         v1y = screenPoints[i].y - screenPoints[i-1].y;
                         v2x = screenPoints[i+1].x - screenPoints[i].x;
@@ -286,8 +287,8 @@ AttractorScope {
                         if(mag1 > 0.01 and: { mag2 > 0.01 }) {
                             dot = (v1x*v2x) + (v1y*v2y);
                             angle = acos((dot / (mag1 * mag2)).clip(-1, 1));
-                            curvature = angle / pi;  // Normalize to 0-1
-                            hue = curvature.linlin(0, 0.5, 0.33, 0.0).clip(0, 1);  // Green (straight) to Red (curved)
+                            curvature = angle / pi;
+                            hue = curvature.linlin(0, 0.5, 0.33, 0.0).clip(0, 1);
                         } {
                             hue = 0.33;
                         };
@@ -302,231 +303,209 @@ AttractorScope {
             );
         };
 
-        // OPTIMIZED: Drawing style functions with color caching and single interpolation
-		drawLines = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors;
+        // Drawing style functions
+        drawLines = { arg interpolatedPoints, bounds, numPoints;
+            var colors;
 
-			Pen.width = 1.5;
-			Pen.joinStyle = 1;
-			Pen.capStyle = 1;
+            Pen.width = 1.5;
+            Pen.joinStyle = 1;
+            Pen.capStyle = 1;
 
-			// Pre-calculate ALL colors (including dynamic ones)
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+            colors = precalculateColors.value(numPoints, interpolatedPoints, points);
 
-			Pen.use {
-				// All colors are now pre-calculated, so use the fast path
-				Pen.moveTo(interpolatedPoints[0]);
-				Pen.strokeColor = colors[0];
+            Pen.use {
+                Pen.moveTo(interpolatedPoints[0]);
+                Pen.strokeColor = colors[0];
 
-				(numPoints - 1).do { |i|
-					var idx = i + 1;
-					Pen.lineTo(interpolatedPoints[idx]);
-					Pen.strokeColor = colors[idx];
-					if(i < (numPoints - 2)) {
-						Pen.stroke;
-						Pen.moveTo(interpolatedPoints[idx]);
-					} {
-						Pen.stroke;
-					};
-				};
-			};
-		};
+                (numPoints - 1).do { |i|
+                    var idx = i + 1;
+                    Pen.lineTo(interpolatedPoints[idx]);
+                    Pen.strokeColor = colors[idx];
+                    if(i < (numPoints - 2)) {
+                        Pen.stroke;
+                        Pen.moveTo(interpolatedPoints[idx]);
+                    } {
+                        Pen.stroke;
+                    };
+                };
+            };
+        };
 
-		drawPoints = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors, pointSize;
+        drawPoints = { arg interpolatedPoints, bounds, numPoints;
+            var colors, pointSize;
 
-			pointSize = (3 * zoom).clip(2, 5.0);
+            pointSize = (3 * zoom).clip(2, 5.0);
 
-			// Pre-calculate ALL colors (including dynamic ones)
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+            colors = precalculateColors.value(numPoints, interpolatedPoints, points);
 
-			// All colors pre-calculated - use fast rendering
-			interpolatedPoints.do { |pt, i|
-				Pen.fillColor = colors[i];
-				Pen.fillOval(Rect(pt.x - (pointSize/2), pt.y - (pointSize/2), pointSize, pointSize));
-			};
-		};
+            interpolatedPoints.do { |pt, i|
+                Pen.fillColor = colors[i];
+                Pen.fillOval(Rect(pt.x - (pointSize/2), pt.y - (pointSize/2), pointSize, pointSize));
+            };
+        };
 
-		drawSmooth = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors;
+        drawSmooth = { arg interpolatedPoints, bounds, numPoints;
+            var colors;
 
-			Pen.width = 2;
-			Pen.joinStyle = 1;
-			Pen.capStyle = 1;
+            Pen.width = 2;
+            Pen.joinStyle = 1;
+            Pen.capStyle = 1;
 
-			if(numPoints < 4) {
-				// Fall back to simple lines for too few points
-				drawLines.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength);
-				^this;
-			};
+            if(numPoints < 4) {
+                drawLines.value(interpolatedPoints, bounds, numPoints);
+            } {
+                colors = precalculateColors.value(numPoints, interpolatedPoints, points);
 
-			// Pre-calculate ALL colors (including dynamic ones)
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+                Pen.use {
+                    (numPoints - 1).do { |i|
+                        var p0, p1, p2, p3, segments;
 
-			Pen.use {
-				// All colors pre-calculated - draw Catmull-Rom splines
-				(numPoints - 1).do { |i|
-					var p0, p1, p2, p3, segments;
+                        p0 = if(i > 0) { interpolatedPoints[i-1] } { interpolatedPoints[i] };
+                        p1 = interpolatedPoints[i];
+                        p2 = interpolatedPoints[i+1];
+                        p3 = if(i < (numPoints - 2)) { interpolatedPoints[i+2] } { interpolatedPoints[i+1] };
 
-					p0 = if(i > 0) { interpolatedPoints[i-1] } { interpolatedPoints[i] };
-					p1 = interpolatedPoints[i];
-					p2 = interpolatedPoints[i+1];
-					p3 = if(i < (numPoints - 2)) { interpolatedPoints[i+2] } { interpolatedPoints[i+1] };
+                        segments = 6;
 
-					segments = 6;  // OPTIMIZED: Reduced from 10
+                        Pen.moveTo(p1);
+                        segments.do { |t|
+                            var tt = (t + 1) / segments;
+                            var tt2 = tt * tt;
+                            var tt3 = tt2 * tt;
+                            var q1, q2, q3, q4, px, py;
 
-					Pen.moveTo(p1);
-					segments.do { |t|
-						var tt = (t + 1) / segments;
-						var tt2 = tt * tt;
-						var tt3 = tt2 * tt;
-						var q1, q2, q3, q4, px, py;
+                            q1 = tt3.neg + (2 * tt2) - tt;
+                            q2 = (3 * tt3) - (5 * tt2) + 2;
+                            q3 = (-3 * tt3) + (4 * tt2) + tt;
+                            q4 = tt3 - tt2;
 
-						q1 = tt3.neg + (2 * tt2) - tt;
-						q2 = (3 * tt3) - (5 * tt2) + 2;
-						q3 = (-3 * tt3) + (4 * tt2) + tt;
-						q4 = tt3 - tt2;
+                            px = 0.5 * ((p0.x * q1) + (p1.x * q2) + (p2.x * q3) + (p3.x * q4));
+                            py = 0.5 * ((p0.y * q1) + (p1.y * q2) + (p2.y * q3) + (p3.y * q4));
 
-						px = 0.5 * ((p0.x * q1) + (p1.x * q2) + (p2.x * q3) + (p3.x * q4));
-						py = 0.5 * ((p0.y * q1) + (p1.y * q2) + (p2.y * q3) + (p3.y * q4));
+                            Pen.lineTo(Point(px, py));
+                        };
 
-						Pen.lineTo(Point(px, py));
-					};
+                        Pen.strokeColor = colors[i];
+                        Pen.stroke;
+                    };
+                };
+            };
+        };
 
-					Pen.strokeColor = colors[i];
-					Pen.stroke;
-				};
-			};
-		};
+        drawGlow = { arg interpolatedPoints, bounds, numPoints;
+            var colors, glowLevels;
 
-		drawGlow = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors, glowLevels;
+            glowLevels = 2;
 
-			// OPTIMIZED: Fewer glow levels for better performance
-			glowLevels = 3;
+            colors = precalculateColors.value(numPoints, interpolatedPoints, points);
 
-			// Pre-calculate ALL colors (including dynamic ones)
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+            Pen.use {
+                var coreSize;
+                glowLevels.do { |level|
+                    var size = (level + 1) * 1.8 * (zoom + 1);
+                    var alphaScale = (1 - (level / glowLevels)).pow(1.5) * 0.5;
 
-			Pen.use {
-				var coreSize;
-				glowLevels.do { |level|
-					// REDUCED: Smaller size multiplier
-					var size = (level + 1) * 1.8 * (zoom + 1);
-					// INCREASED: Higher alpha dropoff for sharper core
-					var alphaScale = (1 - (level / glowLevels)).pow(1.5) * 0.5;
+                    interpolatedPoints.do { |pt, i|
+                        var glowColor = colors[i].copy;
+                        glowColor.alpha = glowColor.alpha * alphaScale;
+                        Pen.fillColor = glowColor;
+                        Pen.fillOval(Rect(pt.x - (size/2), pt.y - (size/2), size, size));
+                    };
+                };
 
-					// All colors pre-calculated - use fast rendering
-					interpolatedPoints.do { |pt, i|
-						var glowColor = colors[i].copy;
-						glowColor.alpha = glowColor.alpha * alphaScale;
-						Pen.fillColor = glowColor;
-						Pen.fillOval(Rect(pt.x - (size/2), pt.y - (size/2), size, size));
-					};
-				};
+                coreSize = 1.5;
+                interpolatedPoints.do { |pt, i|
+                    Pen.fillColor = colors[i];
+                    Pen.fillOval(Rect(pt.x - (coreSize/2), pt.y - (coreSize/2), coreSize, coreSize));
+                };
+            };
+        };
 
-				// ADD: Bright core for sharpness
-				coreSize = 1.5;
-				interpolatedPoints.do { |pt, i|
-					Pen.fillColor = colors[i];
-					Pen.fillOval(Rect(pt.x - (coreSize/2), pt.y - (coreSize/2), coreSize, coreSize));
-				};
-			};
-		};
+        drawRibbon = { arg interpolatedPoints, bounds, numPoints;
+            var colors, ribbonWidth;
 
-		drawRibbon = { arg interpolatedPoints, bounds, numPoints, fadeStart, fadeLength;
-			var colors, ribbonWidth;
+            ribbonWidth = 1.2;
+            Pen.joinStyle = 1;
+            Pen.capStyle = 1;
 
-			ribbonWidth = 1.5;
-			Pen.joinStyle = 1;
-			Pen.capStyle = 1;
+            colors = precalculateColors.value(numPoints, interpolatedPoints, points);
 
-			// Pre-calculate ALL colors (including dynamic ones)
-			colors = precalculateColors.value(numPoints, fadeStart, fadeLength, interpolatedPoints, points);
+            Pen.use {
+                (numPoints - 1).do { |i|
+                    var p1, p2, perp, px, py, norm;
+                    var ribbonColor;
 
-			Pen.use {
-				// All colors pre-calculated - use fast rendering
-				(numPoints - 1).do { |i|
-					var p1, p2, perp, px, py, norm;
-					var ribbonColor;
+                    p1 = interpolatedPoints[i];
+                    p2 = interpolatedPoints[i+1];
 
-					p1 = interpolatedPoints[i];
-					p2 = interpolatedPoints[i+1];
+                    px = p2.y - p1.y;
+                    py = (p2.x - p1.x).neg;
+                    norm = sqrt((px*px) + (py*py));
 
-					// Calculate perpendicular vector
-					px = p2.y - p1.y;
-					py = (p2.x - p1.x).neg;
-					norm = sqrt((px*px) + (py*py));
+                    if(norm > 0.01) {
+                        px = (px / norm) * ribbonWidth;
+                        py = (py / norm) * ribbonWidth;
 
-					if(norm > 0.01) {
-						px = (px / norm) * ribbonWidth;
-						py = (py / norm) * ribbonWidth;
+                        ribbonColor = colors[i];
 
-						ribbonColor = colors[i];
+                        Pen.fillColor = ribbonColor;
+                        Pen.moveTo(Point(p1.x - px, p1.y - py));
+                        Pen.lineTo(Point(p1.x + px, p1.y + py));
+                        Pen.lineTo(Point(p2.x + px, p2.y + py));
+                        Pen.lineTo(Point(p2.x - px, p2.y - py));
+                        Pen.fill;
+                    };
+                };
+            };
+        };
 
-						// Draw ribbon as a quad
-						Pen.fillColor = ribbonColor;
-						Pen.moveTo(Point(p1.x - px, p1.y - py));
-						Pen.lineTo(Point(p1.x + px, p1.y + py));
-						Pen.lineTo(Point(p2.x + px, p2.y + py));
-						Pen.lineTo(Point(p2.x - px, p2.y - py));
-						Pen.fill;
-					};
-				};
-			};
-		};
+        drawHeatMap = { arg screenPoints, bounds, numPoints;
+            var gridSize, grid, maxVisits;
+            var cellWidth, cellHeight;
+            var gridW, gridH;
 
-		drawHeatMap = { arg screenPoints, bounds, numPoints, fadeStart, fadeLength;
-			var gridSize, grid, maxVisits;
-			var cellWidth, cellHeight;
-			var gridW, gridH;
+            gridSize = 50;
+            gridW = bounds.width;
+            gridH = bounds.height;
+            cellWidth = gridW / gridSize;
+            cellHeight = gridH / gridSize;
 
-			gridSize = 50;
-			gridW = bounds.width;
-			gridH = bounds.height;
-			cellWidth = gridW / gridSize;
-			cellHeight = gridH / gridSize;
+            grid = Array.fill(gridSize * gridSize, 0);
 
-			// OPTIMIZED: 1D array instead of 2D for better performance
-			grid = Array.fill(gridSize * gridSize, 0);
+            screenPoints.do { |pt|
+                var gridX, gridY, idx;
+                gridX = (pt.x / cellWidth).floor.asInteger.clip(0, gridSize - 1);
+                gridY = (pt.y / cellHeight).floor.asInteger.clip(0, gridSize - 1);
+                idx = (gridY * gridSize) + gridX;
+                grid[idx] = grid[idx] + 1;
+            };
 
-			// OPTIMIZED: Single index calculation
-			screenPoints.do { |pt|
-				var gridX, gridY, idx;
-				gridX = (pt.x / cellWidth).floor.asInteger.clip(0, gridSize - 1);
-				gridY = (pt.y / cellHeight).floor.asInteger.clip(0, gridSize - 1);
-				idx = (gridY * gridSize) + gridX;
-				grid[idx] = grid[idx] + 1;
-			};
+            maxVisits = 1;
+            grid.do { |visits|
+                if(visits > maxVisits) { maxVisits = visits };
+            };
 
-			// Find max visits for normalization
-			maxVisits = 1;
-			grid.do { |visits|
-				if(visits > maxVisits) { maxVisits = visits };
-			};
+            Pen.use {
+                gridSize.do { |x|
+                    gridSize.do { |y|
+                        var idx, visits, intensity, hue, color;
+                        idx = (y * gridSize) + x;
+                        visits = grid[idx];
 
-			// Draw heat map
-			Pen.use {
-				gridSize.do { |x|
-					gridSize.do { |y|
-						var idx, visits, intensity, hue, color;
-						idx = (y * gridSize) + x;
-						visits = grid[idx];
+                        if(visits > 0) {
+                            intensity = (visits / maxVisits).sqrt;
+                            hue = intensity.linlin(0, 1, 0.66, 0.0);
+                            color = Color.hsv(hue, 0.9, intensity, intensity * 0.8);
 
-						if(visits > 0) {
-							intensity = (visits / maxVisits).sqrt;
-							hue = intensity.linlin(0, 1, 0.66, 0.0);
-							color = Color.hsv(hue, 0.9, intensity, intensity * 0.8);
+                            Pen.fillColor = color;
+                            Pen.fillRect(Rect(x * cellWidth, y * cellHeight, cellWidth, cellHeight));
+                        };
+                    };
+                };
+            };
+        };
 
-							Pen.fillColor = color;
-							Pen.fillRect(Rect(x * cellWidth, y * cellHeight, cellWidth, cellHeight));
-						};
-					};
-				};
-			};
-		};
-
-        // 3D rotations (kept for reference, will be inlined in draw functions)
+        // 3D rotations
         rotateX = { |point, angle|
             var y = point[1], z = point[2];
             var cosA = cos(angle), sinA = sin(angle);
@@ -756,211 +735,195 @@ AttractorScope {
             ];
         };
 
-		makeGui = { arg parent;
-			var gizmo;
+        makeGui = { arg parent;
+            var gizmo;
 
-			if(window.notNil) { window.close };
+            if(window.notNil) { window.close };
 
-			if(parent.isNil) {
-				view = window = Window(
-					bounds: (smallSize).asRect.center_(Window.availableBounds.center)
-				).name_("Attractor Scope");
-			} {
-				view = View(parent, Rect(0, 0, 800, 830));
-				window = nil;
-			};
+            if(parent.isNil) {
+                view = window = Window(
+                    bounds: (smallSize).asRect.center_(Window.availableBounds.center)
+                ).name_("Attractor Scope");
+            } {
+                view = View(parent, Rect(0, 0, 800, 830));
+                window = nil;
+            };
 
-			scopeView = UserView();
-			scopeView.drawFunc = { this.draw };
-			scopeView.animate = true;
-			scopeView.frameRate = if(colorChoice < 9, { 30 }, { 20 });  // Lower FPS for dynamic colors
-			scopeView.frameRate = 30;
-			scopeView.minHeight_(500);
-			scopeView.canFocus = true;
+            scopeView = UserView();
+            scopeView.drawFunc = { this.draw };
+            scopeView.animate = true;
+            scopeView.frameRate = 30;
+            scopeView.minHeight_(500);
+            scopeView.canFocus = true;
 
+            // Mouse actions
+            scopeView.mouseDownAction = { |view, x, y|
+                setAutoRotate.value(false);
+                lastMouseX = x;
+                lastMouseY = y;
+                view.focus;
+            };
 
+            scopeView.mouseMoveAction = { |view, x, y|
+                var deltaX, deltaY;
+                var sensitivity = 0.01;
 
-			// *** START: NEW MOUSE ACTIONS ***
-			scopeView.mouseDownAction = { |view, x, y|
-				// When the mouse is clicked, stop auto-rotation
-				setAutoRotate.value(false);
+                if(lastMouseX.notNil) {
+                    deltaX = x - lastMouseX;
+                    deltaY = y - lastMouseY;
+                    angleY = angleY + (deltaX * sensitivity);
+                    angleX = angleX + (deltaY * sensitivity);
+                    lastMouseX = x;
+                    lastMouseY = y;
+                };
+            };
 
-				// Store the starting position of the drag
-				lastMouseX = x;
-				lastMouseY = y;
+            scopeView.mouseUpAction = {
+                lastMouseX = nil;
+                lastMouseY = nil;
+            };
 
-				view.focus;
-			};
+            delay1Slider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+            trailSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+            resolutionSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+            rotationSpeedSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+            zoomSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
 
-			scopeView.mouseMoveAction = { |view, x, y|
-				var deltaX, deltaY;
-				var sensitivity = 0.01; // Adjust this value to change rotation speed
+            dimensionMenu = PopUpMenu().items_(["2D", "3D", "4D", "5D", "6D"]);
+            colorMenu = PopUpMenu().items_(["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"]);
+            styleMenu = PopUpMenu().items_(["Lines", "Points", "Smooth", "Glow", "Ribbon", "Heat Map"]);
+            rateMenu = PopUpMenu().items_(["Audio", "Control"]);
 
-				// Ensure we have a starting point (i.e., mouseDown has occurred)
-				if(lastMouseX.notNil) {
-					// Calculate the distance moved since the last event
-					deltaX = x - lastMouseX;
-					deltaY = y - lastMouseY;
+            autoRotateCheckBox = CheckBox().value_(autoRotate);
+            exportButton = Button().states_([["Export PNG", Color.black, Color.gray(0.9)]]).maxWidth_(100);
 
-					// Apply the change to the rotation angles
-					angleY = angleY + (deltaX * sensitivity);
-					angleX = angleX + (deltaY * sensitivity);
+            idxNumBox = NumberBox().decimals_(0).step_(1).scroll_step_(1);
+            delay1Box = NumberBox().decimals_(4).step_(0.0001).scroll_step_(0.0001);
+            trailBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
+            resolutionBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
+            rotationSpeedBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+            zoomBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
 
-					// Update the last position for the next movement calculation
-					lastMouseX = x;
-					lastMouseY = y;
-				};
-			};
+            gizmo = "999".bounds(idxNumBox.font).width + 20;
+            idxNumBox.fixedWidth = gizmo;
+            idxNumBox.align = \center;
 
-			scopeView.mouseUpAction = {
-				// When the mouse is released, reset the tracking variables
-				lastMouseX = nil;
-				lastMouseY = nil;
-			};
-			// *** END: NEW MOUSE ACTIONS ***
+            delay1Box.fixedWidth_(70);
+            trailBox.fixedWidth_(70).clipLo_(10).clipHi_(5000);
+            resolutionBox.fixedWidth_(70).clipLo_(100).clipHi_(2000);
+            rotationSpeedBox.fixedWidth_(70).clipLo_(0.1).clipHi_(5.0);
+            zoomBox.fixedWidth_(70).clipLo_(0.25).clipHi_(4.0);
 
+            delay1Slider.value_(delaySpec.unmap(delayTime1));
+            trailSlider.value_(trailSpec.unmap(trailLength));
+            resolutionSlider.value_(resolutionSpec.unmap(resolution));
+            rotationSpeedSlider.value_(rotationSpeedSpec.unmap(rotationSpeed));
+            zoomSlider.value_(zoomSpec.unmap(zoom));
 
-			delay1Slider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
-			trailSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
-			resolutionSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
-			rotationSpeedSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
-			zoomSlider = Slider().orientation_(\horizontal).focusColor_(Color.clear);
+            dimensionMenu.value_(dimension - 2);
+            colorMenu.value_(colorChoice);
+            styleMenu.value_(drawStyle);
+            rateMenu.value_(if(bus.rate === \audio) { 0 } { 1 });
 
-			dimensionMenu = PopUpMenu().items_(["2D", "3D", "4D", "5D", "6D"]);
-			colorMenu = PopUpMenu().items_(["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"]);
-			styleMenu = PopUpMenu().items_(["Lines", "Points", "Smooth", "Glow", "Ribbon", "Heat Map"]);
-			rateMenu = PopUpMenu().items_(["Audio", "Control"]);
+            idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
+            delay1Box.value_(delayTime1);
+            trailBox.value_(trailLength);
+            resolutionBox.value_(resolution);
+            rotationSpeedBox.value_(rotationSpeed);
+            zoomBox.value_(zoom);
 
-			autoRotateCheckBox = CheckBox().value_(autoRotate);
-			exportButton = Button().states_([["Export JPG", Color.black, Color.gray(0.9)]]).maxWidth_(100);
+            view.layout =
+            VLayout(
+                HLayout(
+                    StaticText().string_("Dimension:"),
+                    dimensionMenu,
+                    StaticText().string_("Color:"),
+                    colorMenu,
+                    StaticText().string_("Style:"),
+                    styleMenu,
+                    [StaticText().string_("Auto-Rotate:"), align: \right],
+                    autoRotateCheckBox,
+                    [StaticText().string_("Input:"), align: \right],
+                    rateMenu,
+                    idxNumBox,
+                    exportButton,
+                    nil
+                ).margins_(2).spacing_(4),
+                scopeView,
+                HLayout(
+                    StaticText().string_("Delay (Dt):").fixedWidth_(70),
+                    delay1Slider.maxHeight_(20),
+                    delay1Box
+                ).margins_(0).spacing_(4),
+                HLayout(
+                    StaticText().string_("Trail:").fixedWidth_(70),
+                    trailSlider.maxHeight_(20),
+                    trailBox
+                ).margins_(0).spacing_(4),
+                HLayout(
+                    StaticText().string_("Resolution:").fixedWidth_(70),
+                    resolutionSlider.maxHeight_(20),
+                    resolutionBox
+                ).margins_(0).spacing_(4),
+                HLayout(
+                    StaticText().string_("Rot Speed:").fixedWidth_(70),
+                    rotationSpeedSlider.maxHeight_(20),
+                    rotationSpeedBox
+                ).margins_(0).spacing_(4),
+                HLayout(
+                    StaticText().string_("Zoom:").fixedWidth_(70),
+                    zoomSlider.maxHeight_(20),
+                    zoomBox
+                ).margins_(0).spacing_(4)
+            ).margins_(2).spacing_(0);
 
-			idxNumBox = NumberBox().decimals_(0).step_(1).scroll_step_(1);
-			delay1Box = NumberBox().decimals_(4).step_(0.0001).scroll_step_(0.0001);
-			trailBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
-			resolutionBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
-			rotationSpeedBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
-			zoomBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+            scopeView.focus;
 
-			gizmo = "999".bounds(idxNumBox.font).width + 20;
-			idxNumBox.fixedWidth = gizmo;
-			idxNumBox.align = \center;
+            delay1Slider.action = { |me| setDelayTime1.value(delaySpec.map(me.value)) };
+            delay1Slider.mouseUpAction = { scopeView.focus };
+            delay1Box.action = { |me| setDelayTime1.value(me.value) };
+            trailSlider.action = { |me| setTrailLength.value(trailSpec.map(me.value).asInteger) };
+            trailSlider.mouseUpAction = { scopeView.focus };
+            trailBox.action = { |me| setTrailLength.value(me.value) };
+            resolutionSlider.action = { |me| setResolution.value(resolutionSpec.map(me.value).asInteger) };
+            resolutionSlider.mouseUpAction = { scopeView.focus };
+            resolutionBox.action = { |me| setResolution.value(me.value) };
+            rotationSpeedSlider.action = { |me| setRotationSpeed.value(rotationSpeedSpec.map(me.value)) };
+            rotationSpeedSlider.mouseUpAction = { scopeView.focus };
+            rotationSpeedBox.action = { |me| setRotationSpeed.value(me.value) };
+            zoomSlider.action = { |me| setZoom.value(zoomSpec.map(me.value)) };
+            zoomSlider.mouseUpAction = { scopeView.focus };
+            zoomBox.action = { |me| setZoom.value(me.value) };
+            autoRotateCheckBox.action = { |cb| setAutoRotate.value(cb.value) };
+            exportButton.action = { this.exportScreenshot };
+            dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
+            colorMenu.action = { |me| setColor.value(me.value) };
+            styleMenu.action = { |me| setStyle.value(me.value) };
+            idxNumBox.action = { |me| setIndex.value(me.value) };
+            rateMenu.action = { |me| setRate.value(me.value) };
+            scopeView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
+            view.onClose = { view = nil; this.quit; };
 
-			delay1Box.fixedWidth_(70);
-			trailBox.fixedWidth_(70).clipLo_(10).clipHi_(5000);
-			resolutionBox.fixedWidth_(70).clipLo_(100).clipHi_(2000);
-			rotationSpeedBox.fixedWidth_(70).clipLo_(0.1).clipHi_(5.0);
-			zoomBox.fixedWidth_(70).clipLo_(0.25).clipHi_(4.0);
-
-			delay1Slider.value_(delaySpec.unmap(delayTime1));
-			trailSlider.value_(trailSpec.unmap(trailLength));
-			resolutionSlider.value_(resolutionSpec.unmap(resolution));
-			rotationSpeedSlider.value_(rotationSpeedSpec.unmap(rotationSpeed));
-			zoomSlider.value_(zoomSpec.unmap(zoom));
-
-			dimensionMenu.value_(dimension - 2);
-			colorMenu.value_(colorChoice);
-			styleMenu.value_(drawStyle);
-			rateMenu.value_(if(bus.rate === \audio) { 0 } { 1 });
-
-			idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
-			delay1Box.value_(delayTime1);
-			trailBox.value_(trailLength);
-			resolutionBox.value_(resolution);
-			rotationSpeedBox.value_(rotationSpeed);
-			zoomBox.value_(zoom);
-
-			view.layout =
-			VLayout(
-				HLayout(
-					StaticText().string_("Dimension:"),
-					dimensionMenu,
-					StaticText().string_("Color:"),
-					colorMenu,
-					StaticText().string_("Style:"),
-					styleMenu,
-					[StaticText().string_("Auto-Rotate:"), align: \right],
-					autoRotateCheckBox,
-					[StaticText().string_("Input:"), align: \right],
-					rateMenu,
-					idxNumBox,
-					exportButton,
-					nil
-				).margins_(2).spacing_(4), // Adjusted spacing for better look
-				scopeView,
-				HLayout(
-					StaticText().string_("Delay (Dt):").fixedWidth_(70),
-					delay1Slider.maxHeight_(20),
-					delay1Box
-				).margins_(0).spacing_(4),
-				HLayout(
-					StaticText().string_("Trail:").fixedWidth_(70),
-					trailSlider.maxHeight_(20),
-					trailBox
-				).margins_(0).spacing_(4),
-				HLayout(
-					StaticText().string_("Resolution:").fixedWidth_(70),
-					resolutionSlider.maxHeight_(20),
-					resolutionBox
-				).margins_(0).spacing_(4),
-				HLayout(
-					StaticText().string_("Rot Speed:").fixedWidth_(70),
-					rotationSpeedSlider.maxHeight_(20),
-					rotationSpeedBox
-				).margins_(0).spacing_(4),
-				HLayout(
-					StaticText().string_("Zoom:").fixedWidth_(70),
-					zoomSlider.maxHeight_(20),
-					zoomBox
-				).margins_(0).spacing_(4)
-			).margins_(2).spacing_(0);
-
-			scopeView.focus;
-
-			delay1Slider.action = { |me| setDelayTime1.value(delaySpec.map(me.value)) };
-			delay1Slider.mouseUpAction = { scopeView.focus };
-			delay1Box.action = { |me| setDelayTime1.value(me.value) };
-			trailSlider.action = { |me| setTrailLength.value(trailSpec.map(me.value).asInteger) };
-			trailSlider.mouseUpAction = { scopeView.focus };
-			trailBox.action = { |me| setTrailLength.value(me.value) };
-			resolutionSlider.action = { |me| setResolution.value(resolutionSpec.map(me.value).asInteger) };
-			resolutionSlider.mouseUpAction = { scopeView.focus };
-			resolutionBox.action = { |me| setResolution.value(me.value) };
-			rotationSpeedSlider.action = { |me| setRotationSpeed.value(rotationSpeedSpec.map(me.value)) };
-			rotationSpeedSlider.mouseUpAction = { scopeView.focus };
-			rotationSpeedBox.action = { |me| setRotationSpeed.value(me.value) };
-			zoomSlider.action = { |me| setZoom.value(zoomSpec.map(me.value)) };
-			zoomSlider.mouseUpAction = { scopeView.focus };
-			zoomBox.action = { |me| setZoom.value(me.value) };
-			autoRotateCheckBox.action = { |cb| setAutoRotate.value(cb.value) };
-			exportButton.action = { this.exportScreenshot };
-			dimensionMenu.action = { |me| setDimension.value(me.value + 2) };
-			colorMenu.action = { |me| setColor.value(me.value) };
-			styleMenu.action = { |me| setStyle.value(me.value) };
-			idxNumBox.action = { |me| setIndex.value(me.value) };
-			rateMenu.action = { |me| setRate.value(me.value) };
-			scopeView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
-			view.onClose = { view = nil; this.quit; };
-
-			if(window.notNil) { window.front };
-		};
+            if(window.notNil) { window.front };
+        };
 
         setDelayTime1 = { arg val;
             delayTime1 = delaySpec.constrain(val);
             delayTime2 = delayTime1 * 2;
-			delayTime3 = delayTime1 * 3;
-			delayTime4 = delayTime1 * 4;
-			delayTime5 = delayTime1 * 5;
+            delayTime3 = delayTime1 * 3;
+            delayTime4 = delayTime1 * 4;
+            delayTime5 = delayTime1 * 5;
 
-			if(synth.notNil and: { synth.delaySynth.notNil }) {
-				synth.setDelayTime1(delayTime1);
-				synth.setDelayTime2(delayTime2);
-				synth.setDelayTime3(delayTime3);
-				synth.setDelayTime4(delayTime4);
-				synth.setDelayTime5(delayTime5);
-			};
+            if(synth.notNil and: { synth.delaySynth.notNil }) {
+                synth.setDelayTime1(delayTime1);
+                synth.setDelayTime2(delayTime2);
+                synth.setDelayTime3(delayTime3);
+                synth.setDelayTime4(delayTime4);
+                synth.setDelayTime5(delayTime5);
+            };
 
-			if(delay1Box.notNil) { delay1Box.value = delayTime1 };
-			if(delay1Slider.notNil) { delay1Slider.value = delaySpec.unmap(delayTime1) };
+            if(delay1Box.notNil) { delay1Box.value = delayTime1 };
+            if(delay1Slider.notNil) { delay1Slider.value = delaySpec.unmap(delayTime1) };
         };
 
         setTrailLength = { arg val;
@@ -1001,8 +964,8 @@ AttractorScope {
                 6, { Color.new255(255, 165, 0) },
                 7, { Color.new255(200, 0, 255) },
                 8, { Color.new255(255, 255, 255) },
-                9, { Color.new255(255, 218, 0) },  // Rainbow (placeholder)
-                10, { Color.new255(255, 218, 0) }   // Velocity (placeholder)
+                9, { Color.new255(255, 218, 0) },
+                10, { Color.new255(255, 218, 0) }
             );
         };
 
@@ -1017,35 +980,35 @@ AttractorScope {
             this.run;
         };
 
-		setIndex = { arg i;
-			bus = Bus(bus.rate, i, 1, bus.server);
-			if(synth.notNil) { synth.setBusIndex(i) };
-		};
+        setIndex = { arg i;
+            bus = Bus(bus.rate, i, 1, bus.server);
+            if(synth.notNil) { synth.setBusIndex(i) };
+        };
 
-		setRate = { arg val;
-			val.switch(
-				0, {
-					bus = Bus(\audio, bus.index, 1, bus.server);
-					busSpec = aBusSpec;
-				},
-				1, {
-					bus = Bus(\control, bus.index, 1, bus.server);
-					busSpec = cBusSpec;
-				}
-			);
-			if(synth.notNil) { synth.setRate(val) };
-			if(idxNumBox.notNil) {
-				idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
-			};
-			this.index = bus.index;
-		};
+        setRate = { arg val;
+            val.switch(
+                0, {
+                    bus = Bus(\audio, bus.index, 1, bus.server);
+                    busSpec = aBusSpec;
+                },
+                1, {
+                    bus = Bus(\control, bus.index, 1, bus.server);
+                    busSpec = cBusSpec;
+                }
+            );
+            if(synth.notNil) { synth.setRate(val) };
+            if(idxNumBox.notNil) {
+                idxNumBox.clipLo_(busSpec.minval).clipHi_(busSpec.maxval).value_(bus.index);
+            };
+            this.index = bus.index;
+        };
 
-		setAutoRotate = { arg bool;
-			autoRotate = bool;
-			if(autoRotateCheckBox.notNil) {
-				autoRotateCheckBox.value = autoRotate;
-			};
-		};
+        setAutoRotate = { arg bool;
+            autoRotate = bool;
+            if(autoRotateCheckBox.notNil) {
+                autoRotateCheckBox.value = autoRotate;
+            };
+        };
 
         updateColors = {
             // Keep current color choice
@@ -1061,161 +1024,150 @@ AttractorScope {
         this.run;
     }
 
-	quit {
-		this.stop;  // Stops reading task
-		synth.free; // Frees the AttractorScopeSynth completely
-		ServerTree.remove(this, server);
-		ServerQuit.remove(this, server);
-		if(window.notNil) { window.close };
-	}
+    quit {
+        this.stop;
+        synth.free;
+        ServerTree.remove(this, server);
+        ServerQuit.remove(this, server);
+        if(window.notNil) { window.close };
+    }
 
-	free { this.quit }
+    free { this.quit }
 
-	doOnCmdPeriod {
-		// Stop reading immediately when synths are killed
-		if(readTask.notNil) { readTask.stop; readTask = nil };
-		points = [];  // Clear points since synth is dead
-	}
+    doOnCmdPeriod {
+        if(readTask.notNil) { readTask.stop; readTask = nil };
+        points = [];
+    }
 
-	doOnServerTree {
-		synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3,
-			delayTime4, delayTime5, dimension, { |oldSynth, oldBuffer|
-				// Suppress errors before freeing (node might not exist after cmd+period)
-				if(oldSynth.notNil) {
-					server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
-				};
-				if(oldBuffer.notNil) { oldBuffer.free };
-				this.startReading;
-		});
-	}
+    doOnServerTree {
+        synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3,
+            delayTime4, delayTime5, dimension, { |oldSynth, oldBuffer|
+                if(oldSynth.notNil) {
+                    server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
+                };
+                if(oldBuffer.notNil) { oldBuffer.free };
+                this.startReading;
+        });
+    }
 
-	doOnServerQuit {
-		if(readTask.notNil) { readTask.stop; readTask = nil };
-	}
+    doOnServerQuit {
+        if(readTask.notNil) { readTask.stop; readTask = nil };
+    }
 
-	run {
-		synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3, delayTime4, delayTime5, dimension, {
-			arg oldSynth, oldBuffer;
+    run {
+        synth.play(maxBufSize, bus, delayTime1, delayTime2, delayTime3, delayTime4, delayTime5, dimension, {
+            arg oldSynth, oldBuffer;
 
-			if(view.notNil) {
-				var sampleRate = server.sampleRate;
-				var bufferFillTime;
+            if(view.notNil) {
+                var sampleRate = server.sampleRate;
+                var bufferFillTime;
 
-				if(sampleRate.isNil or: { sampleRate <= 0 }) {
-					"WARNING: Sample rate not available, using default 44100".postln;
-					sampleRate = 44100;
-				};
+                if(sampleRate.isNil or: { sampleRate <= 0 }) {
+                    "WARNING: Sample rate not available, using default 44100".postln;
+                    sampleRate = 44100;
+                };
 
-				bufferFillTime = (maxBufSize / sampleRate) * 2;
-				bufferFillTime = (bufferFillTime + maxDelayTime + 0.2).max(0.4);
+                bufferFillTime = (maxBufSize / sampleRate) * 2;
+                bufferFillTime = (bufferFillTime + maxDelayTime + 0.2).max(0.4);
 
-				"New dimension ready in %s...".format(bufferFillTime.round(0.01)).postln;
+                "New dimension ready in %s...".format(bufferFillTime.round(0.01)).postln;
 
-				AppClock.sched(bufferFillTime, {
-					// Suppress errors before freeing
-					if(oldSynth.notNil) {
-						server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
-					};
-					if(oldBuffer.notNil) {
-						oldBuffer.free;
-					};
+                AppClock.sched(bufferFillTime, {
+                    if(oldSynth.notNil) {
+                        server.sendBundle(nil, ['/error', -1], [11, oldSynth.nodeID], ['/error', -2]);
+                    };
+                    if(oldBuffer.notNil) {
+                        oldBuffer.free;
+                    };
 
-					this.stopReading;
-					points = [];
-					this.startReading;
-					"Switched to %D!".format(dimension).postln;
-				});
-			};
-		});
-	}
+                    this.stopReading;
+                    points = [];
+                    this.startReading;
+                    "Switched to %D!".format(dimension).postln;
+                });
+            };
+        });
+    }
 
     stop {
         this.stopReading;
         synth.stop;
     }
 
-    // OPTIMIZED: Improved buffer reading with better memory management
-	startReading {
-		var buffer, bufferDimension;
-		var isReading = false;  // Prevent overlapping reads
+    startReading {
+        var buffer, bufferDimension;
+        var isReading = false;
 
-		this.stopReading;
+        this.stopReading;
 
-		buffer = synth.buffer;
-		bufferDimension = dimension;
+        buffer = synth.buffer;
+        bufferDimension = dimension;
 
-		if(buffer.isNil) {
-			"ERROR: Buffer is nil!".postln;
-			^this;
-		};
+        if(buffer.isNil) {
+            "ERROR: Buffer is nil!".postln;
+            ^this;
+        };
 
-		readTask = Routine({
-			inf.do {
-				// Only start new read if previous one completed
-				if(buffer.notNil and: { buffer.numFrames.notNil } and: { isReading.not }) {
-					isReading = true;
+        readTask = Routine({
+            inf.do {
+                if(buffer.notNil and: { buffer.numFrames.notNil } and: { isReading.not }) {
+                    isReading = true;
 
-					buffer.loadToFloatArray(action: { |data|
-						var numFrames = buffer.numFrames;
-						var readStep, sampleStep;
-						var maxPoints, actualPoints, writeIdx;
-						var sampledPoints;
+                    buffer.loadToFloatArray(action: { |data|
+                        var numFrames = buffer.numFrames;
+                        var readStep, sampleStep;
+                        var maxPoints, actualPoints, writeIdx;
+                        var sampledPoints;
 
-						// Check if buffer was freed during async callback
-						if(numFrames.notNil) {
-							readStep = 4;
+                        if(numFrames.notNil) {
+                            readStep = 4;
 
-							// OPTIMIZATION: Calculate resolution stride FIRST
-							maxPoints = (numFrames / readStep).asInteger;
-							sampleStep = max(1, (maxPoints / resolution).ceil.asInteger);
-							actualPoints = (maxPoints / sampleStep).asInteger;
+                            maxPoints = (numFrames / readStep).asInteger;
+                            sampleStep = max(1, (maxPoints / resolution).ceil.asInteger);
+                            actualPoints = (maxPoints / sampleStep).asInteger;
 
-							// Pre-allocate exact size needed
-							sampledPoints = Array.newClear(actualPoints);
-							writeIdx = 0;
+                            sampledPoints = Array.newClear(actualPoints);
+                            writeIdx = 0;
 
-							// Read with stride to hit resolution directly
-							actualPoints.do { |i|
-								var frameIdx = i * sampleStep * readStep;
-								var dataIdx = frameIdx * bufferDimension;
-								var point;
+                            actualPoints.do { |i|
+                                var frameIdx = i * sampleStep * readStep;
+                                var dataIdx = frameIdx * bufferDimension;
+                                var point;
 
-								if(dataIdx + (bufferDimension - 1) < data.size) {
-									point = Array.newClear(bufferDimension);
-									bufferDimension.do { |d|
-										point[d] = data[dataIdx + d];
-									};
-									sampledPoints[writeIdx] = point;
-									writeIdx = writeIdx + 1;
-								};
-							};
+                                if(dataIdx + (bufferDimension - 1) < data.size) {
+                                    point = Array.newClear(bufferDimension);
+                                    bufferDimension.do { |d|
+                                        point[d] = data[dataIdx + d];
+                                    };
+                                    sampledPoints[writeIdx] = point;
+                                    writeIdx = writeIdx + 1;
+                                };
+                            };
 
-							// Truncate to actual written points if needed
-							if(writeIdx > 0 and: { writeIdx < actualPoints }) {
-								sampledPoints = sampledPoints.copyRange(0, (writeIdx - 1).asInteger);
-							};
+                            if(writeIdx > 0 and: { writeIdx < actualPoints }) {
+                                sampledPoints = sampledPoints.copyRange(0, (writeIdx - 1).asInteger);
+                            };
 
-							// NOW apply trail length limit (on already downsampled data)
-							if(writeIdx > 0) {
-								if(sampledPoints.size > trailLength) {
-									var startIdx = (sampledPoints.size - trailLength).asInteger.max(0);
-									points = sampledPoints.copyRange(startIdx, (sampledPoints.size - 1).asInteger);
-								} {
-									points = sampledPoints;
-								};
-							};
-						};
+                            if(writeIdx > 0) {
+                                if(sampledPoints.size > trailLength) {
+                                    var startIdx = (sampledPoints.size - trailLength).asInteger.max(0);
+                                    points = sampledPoints.copyRange(startIdx, (sampledPoints.size - 1).asInteger);
+                                } {
+                                    points = sampledPoints;
+                                };
+                            };
+                        };
 
-						isReading = false;  // Mark read as complete
-					});
-				};
+                        isReading = false;
+                    });
+                };
 
-				(1/30).wait;  // Read at 60Hz for smoother updates
-			};
-		});
+                (1/30).wait;
+            };
+        });
 
-		AppClock.sched(0, readTask);
-	}
+        AppClock.sched(0, readTask);
+    }
 
     stopReading {
         if(readTask.notNil) {
@@ -1239,25 +1191,22 @@ AttractorScope {
         };
     }
 
-    drawWithStyle { arg screenPoints, bounds, numPoints, fadeStart, fadeLength, dimensionLabel;
+    drawWithStyle { arg screenPoints, bounds, numPoints, dimensionLabel;
         var styleName, colorName, interpolatedPoints;
 
-        // OPTIMIZED: Single interpolation for all styles (except heat map)
-        if(drawStyle != 5) {  // Heat map doesn't use interpolation
+        if(drawStyle != 5) {
             interpolatedPoints = interpolatePoints.value(screenPoints);
         };
 
-        // Single switch for all dimensions
         drawStyle.switch(
-            0, { drawLines.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength) },
-            1, { drawPoints.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength) },
-            2, { drawSmooth.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength) },
-            3, { drawGlow.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength) },
-            4, { drawRibbon.value(interpolatedPoints, bounds, numPoints, fadeStart, fadeLength) },
-            5, { drawHeatMap.value(screenPoints, bounds, numPoints, fadeStart, fadeLength) }  // Heat map uses original points
+            0, { drawLines.value(interpolatedPoints, bounds, numPoints) },
+            1, { drawPoints.value(interpolatedPoints, bounds, numPoints) },
+            2, { drawSmooth.value(interpolatedPoints, bounds, numPoints) },
+            3, { drawGlow.value(interpolatedPoints, bounds, numPoints) },
+            4, { drawRibbon.value(interpolatedPoints, bounds, numPoints) },
+            5, { drawHeatMap.value(screenPoints, bounds, numPoints) }
         );
 
-        // Single label drawing
         styleName = ["Lines", "Points", "Smooth", "Glow", "Ribbon", "Heat Map"][drawStyle];
         colorName = ["Yellow", "Cyan", "Magenta", "Green", "Red", "Blue", "Orange", "Purple", "White", "Rainbow", "Velocity", "Distance", "Curvature"][colorChoice];
 
@@ -1276,7 +1225,6 @@ AttractorScope {
     draw2D {
         var bounds, centerX, centerY, numPoints;
         var screenX, screenY;
-        var fadeStart, fadeLength;
         var screenPoints;
 
         bounds = scopeView.bounds;
@@ -1284,14 +1232,10 @@ AttractorScope {
         centerY = bounds.height / 2;
         numPoints = points.size;
 
-        fadeLength = max(numPoints * 0.2, 50).asInteger;
-        fadeStart = max(numPoints - fadeLength, 0);
-
         Pen.fillColor = Color.black;
         Pen.fillRect(bounds);
 
         if(numPoints > 1) {
-            // OPTIMIZED: Pre-allocate array
             screenPoints = Array.newClear(numPoints);
 
             numPoints.do { |i|
@@ -1305,24 +1249,20 @@ AttractorScope {
                 };
             };
 
-            this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "2D");
+            this.drawWithStyle(screenPoints, bounds, numPoints, "2D");
         };
     }
 
-    // OPTIMIZED: draw3D with cached trig and inlined rotations
     draw3D {
-        var bounds, centerX, centerY, numPoints, fadeStart, fadeLength;
+        var bounds, centerX, centerY, numPoints;
         var screenX, screenY;
         var screenPoints;
-        var cosX, sinX, cosY, sinY;  // OPTIMIZATION: Pre-calculate trig
+        var cosX, sinX, cosY, sinY;
 
         bounds = scopeView.bounds;
         centerX = bounds.width / 2;
         centerY = bounds.height / 2;
         numPoints = points.size;
-
-        fadeLength = max(numPoints * 0.2, 50).asInteger;
-        fadeStart = max(numPoints - fadeLength, 0);
 
         Pen.fillColor = Color.black;
         Pen.fillRect(bounds);
@@ -1332,12 +1272,10 @@ AttractorScope {
             angleX = angleX + (0.005 * rotationSpeed);
         };
 
-        // OPTIMIZATION: Calculate trig once per frame
         cosX = cos(angleX); sinX = sin(angleX);
         cosY = cos(angleY); sinY = sin(angleY);
 
         if(numPoints > 1) {
-            // OPTIMIZED: Pre-allocate array
             screenPoints = Array.newClear(numPoints);
 
             numPoints.do { |i|
@@ -1346,22 +1284,18 @@ AttractorScope {
                     var rx, ry, rz, y, z, x;
                     var projX, projY, zProj, factor;
 
-                    // Inline rotation with cached values - rotateX:
                     y = pt[1]; z = pt[2];
                     ry = (y * cosX) - (z * sinX);
                     rz = (y * sinX) + (z * cosX);
 
-                    // Inline rotation - rotateY:
                     x = pt[0];
                     rx = (x * cosY) + (rz * sinY);
                     rz = (rz * cosY) - (x * sinY);
 
-                    // Scale
                     rx = rx * scale;
                     ry = ry * scale;
                     rz = rz * scale;
 
-                    // Project
                     zProj = rz + 400;
                     factor = 400 / zProj.max(1);
                     projX = rx * factor;
@@ -1375,25 +1309,21 @@ AttractorScope {
                 };
             };
 
-            this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "3D");
+            this.drawWithStyle(screenPoints, bounds, numPoints, "3D");
         };
     }
 
-    // OPTIMIZED: draw4D with cached trig
     draw4D {
-        var bounds, centerX, centerY, numPoints, fadeStart, fadeLength;
+        var bounds, centerX, centerY, numPoints;
         var rotated4D, projected3D, screenX, screenY;
         var screenPoints;
-        var cosXW, sinXW, cosYW, sinYW, cosZW, sinZW;  // OPTIMIZATION
-        var cosX, sinX, cosY, sinY;  // OPTIMIZATION
+        var cosXW, sinXW, cosYW, sinYW, cosZW, sinZW;
+        var cosX, sinX, cosY, sinY;
 
         bounds = scopeView.bounds;
         centerX = bounds.width / 2;
         centerY = bounds.height / 2;
         numPoints = points.size;
-
-        fadeLength = max(numPoints * 0.2, 50).asInteger;
-        fadeStart = max(numPoints - fadeLength, 0);
 
         Pen.fillColor = Color.black;
         Pen.fillRect(bounds);
@@ -1406,7 +1336,6 @@ AttractorScope {
             angleX = angleX + (0.005 * rotationSpeed);
         };
 
-        // OPTIMIZATION: Calculate all trig once
         cosXW = cos(angle4D_XW); sinXW = sin(angle4D_XW);
         cosYW = cos(angle4D_YW); sinYW = sin(angle4D_YW);
         cosZW = cos(angle4D_ZW); sinZW = sin(angle4D_ZW);
@@ -1424,33 +1353,27 @@ AttractorScope {
                     var rx3, ry3, rz3, y3, z3, x3;
                     var projX, projY, zProj, factor3d;
 
-                    // Inline 4D rotations with cached trig
                     x4 = pt[0]; y4 = pt[1]; z4 = pt[2]; w4 = pt[3];
 
-                    // rotate4D_XW
                     rx4 = (x4 * cosXW) - (w4 * sinXW);
                     rw4 = (x4 * sinXW) + (w4 * cosXW);
                     ry4 = y4; rz4 = z4;
 
-                    // rotate4D_YW
                     x4 = rx4; y4 = ry4; w4 = rw4;
                     ry4 = (y4 * cosYW) - (w4 * sinYW);
                     rw4 = (y4 * sinYW) + (w4 * cosYW);
                     rx4 = x4; rz4 = rz4;
 
-                    // rotate4D_ZW
                     z4 = rz4; w4 = rw4;
                     rz4 = (z4 * cosZW) - (w4 * sinZW);
                     rw4 = (z4 * sinZW) + (w4 * cosZW);
 
-                    // project4Dto3D
                     w = rw4 + 2;
                     projFactor = 2 / w.max(0.1);
                     p3x = rx4 * projFactor;
                     p3y = ry4 * projFactor;
                     p3z = rz4 * projFactor;
 
-                    // Inline 3D rotations
                     y3 = p3y; z3 = p3z;
                     ry3 = (y3 * cosX) - (z3 * sinX);
                     rz3 = (y3 * sinX) + (z3 * cosX);
@@ -1459,7 +1382,6 @@ AttractorScope {
                     rx3 = (x3 * cosY) + (rz3 * sinY);
                     rz3 = (rz3 * cosY) - (x3 * sinY);
 
-                    // Scale and project to 2D
                     rx3 = rx3 * scale;
                     ry3 = ry3 * scale;
                     rz3 = rz3 * scale;
@@ -1477,13 +1399,12 @@ AttractorScope {
                 };
             };
 
-            this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "4D");
+            this.drawWithStyle(screenPoints, bounds, numPoints, "4D");
         };
     }
 
-    // OPTIMIZED: draw5D with cached trig
     draw5D {
-        var bounds, centerX, centerY, numPoints, fadeStart, fadeLength;
+        var bounds, centerX, centerY, numPoints;
         var screenX, screenY;
         var screenPoints;
         var cosXW, sinXW, cosYW, sinYW, cosZW, sinZW, cosXV, sinXV, cosYV, sinYV;
@@ -1494,9 +1415,6 @@ AttractorScope {
         centerX = bounds.width / 2;
         centerY = bounds.height / 2;
         numPoints = points.size;
-
-        fadeLength = max(numPoints * 0.2, 50).asInteger;
-        fadeStart = max(numPoints - fadeLength, 0);
 
         Pen.fillColor = Color.black;
         Pen.fillRect(bounds);
@@ -1514,7 +1432,6 @@ AttractorScope {
             angleX = angleX + (0.005 * rotationSpeed);
         };
 
-        // OPTIMIZATION: Pre-calculate all trig
         cosXW = cos(angle5D_XW); sinXW = sin(angle5D_XW);
         cosYW = cos(angle5D_YW); sinYW = sin(angle5D_YW);
         cosZW = cos(angle5D_ZW); sinZW = sin(angle5D_ZW);
@@ -1539,35 +1456,28 @@ AttractorScope {
                     var rx3, ry3, rz3, y3, z3, x3;
                     var projX, projY, zProj, factor3d;
 
-                    // Inline 5D rotations
                     x5 = pt[0]; y5 = pt[1]; z5 = pt[2]; w5 = pt[3]; v5 = pt[4];
 
-                    // rotate5D_XW
                     rx5 = (x5 * cosXW) - (w5 * sinXW);
                     rw5 = (x5 * sinXW) + (w5 * cosXW);
                     ry5 = y5; rz5 = z5; rv5 = v5;
 
-                    // rotate5D_YW
                     y5 = ry5; w5 = rw5;
                     ry5 = (y5 * cosYW) - (w5 * sinYW);
                     rw5 = (y5 * sinYW) + (w5 * cosYW);
 
-                    // rotate5D_ZW
                     z5 = rz5; w5 = rw5;
                     rz5 = (z5 * cosZW) - (w5 * sinZW);
                     rw5 = (z5 * sinZW) + (w5 * cosZW);
 
-                    // rotate5D_XV
                     x5 = rx5; v5 = rv5;
                     rx5 = (x5 * cosXV) - (v5 * sinXV);
                     rv5 = (x5 * sinXV) + (v5 * cosXV);
 
-                    // rotate5D_YV
                     y5 = ry5; v5 = rv5;
                     ry5 = (y5 * cosYV) - (v5 * sinYV);
                     rv5 = (y5 * sinYV) + (v5 * cosYV);
 
-                    // project5Dto4D
                     v = rv5 + 2;
                     projFactor5 = 2 / v.max(0.1);
                     p4x = rx5 * projFactor5;
@@ -1575,7 +1485,6 @@ AttractorScope {
                     p4z = rz5 * projFactor5;
                     p4w = rw5 * projFactor5;
 
-                    // Inline 4D rotations
                     x4 = p4x; y4 = p4y; z4 = p4z; w4 = p4w;
 
                     rx4 = (x4 * cosXW4) - (w4 * sinXW4);
@@ -1590,14 +1499,12 @@ AttractorScope {
                     rz4 = (z4 * cosZW4) - (w4 * sinZW4);
                     rw4 = (z4 * sinZW4) + (w4 * cosZW4);
 
-                    // project4Dto3D
                     w = rw4 + 2;
                     projFactor4 = 2 / w.max(0.1);
                     p3x = rx4 * projFactor4;
                     p3y = ry4 * projFactor4;
                     p3z = rz4 * projFactor4;
 
-                    // Inline 3D rotations
                     y3 = p3y; z3 = p3z;
                     ry3 = (y3 * cosX) - (z3 * sinX);
                     rz3 = (y3 * sinX) + (z3 * cosX);
@@ -1606,7 +1513,6 @@ AttractorScope {
                     rx3 = (x3 * cosY) + (rz3 * sinY);
                     rz3 = (rz3 * cosY) - (x3 * sinY);
 
-                    // Scale and project
                     rx3 = rx3 * scale;
                     ry3 = ry3 * scale;
                     rz3 = rz3 * scale;
@@ -1624,13 +1530,12 @@ AttractorScope {
                 };
             };
 
-            this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "5D");
+            this.drawWithStyle(screenPoints, bounds, numPoints, "5D");
         };
     }
 
-    // OPTIMIZED: draw6D with cached trig
     draw6D {
-        var bounds, centerX, centerY, numPoints, fadeStart, fadeLength;
+        var bounds, centerX, centerY, numPoints;
         var screenX, screenY;
         var screenPoints;
         var cosXW6, sinXW6, cosYW6, sinYW6, cosZW6, sinZW6, cosXV6, sinXV6, cosYV6, sinYV6, cosZV6, sinZV6;
@@ -1642,9 +1547,6 @@ AttractorScope {
         centerX = bounds.width / 2;
         centerY = bounds.height / 2;
         numPoints = points.size;
-
-        fadeLength = max(numPoints * 0.2, 50).asInteger;
-        fadeStart = max(numPoints - fadeLength, 0);
 
         Pen.fillColor = Color.black;
         Pen.fillRect(bounds);
@@ -1668,7 +1570,6 @@ AttractorScope {
             angleX = angleX + (0.005 * rotationSpeed);
         };
 
-        // OPTIMIZATION: Pre-calculate ALL trig functions
         cosXW6 = cos(angle6D_XW); sinXW6 = sin(angle6D_XW);
         cosYW6 = cos(angle6D_YW); sinYW6 = sin(angle6D_YW);
         cosZW6 = cos(angle6D_ZW); sinZW6 = sin(angle6D_ZW);
@@ -1701,40 +1602,32 @@ AttractorScope {
                     var rx3, ry3, rz3, y3, z3, x3;
                     var projX, projY, zProj, factor3d;
 
-                    // Inline all 6D rotations with cached trig
                     x6 = pt[0]; y6 = pt[1]; z6 = pt[2]; w6 = pt[3]; v6 = pt[4]; u6 = pt[5];
 
-                    // rotate6D_XW
                     rx6 = (x6 * cosXW6) - (w6 * sinXW6);
                     rw6 = (x6 * sinXW6) + (w6 * cosXW6);
                     ry6 = y6; rz6 = z6; rv6 = v6; ru6 = u6;
 
-                    // rotate6D_YW
                     y6 = ry6; w6 = rw6;
                     ry6 = (y6 * cosYW6) - (w6 * sinYW6);
                     rw6 = (y6 * sinYW6) + (w6 * cosYW6);
 
-                    // rotate6D_ZW
                     z6 = rz6; w6 = rw6;
                     rz6 = (z6 * cosZW6) - (w6 * sinZW6);
                     rw6 = (z6 * sinZW6) + (w6 * cosZW6);
 
-                    // rotate6D_XV
                     x6 = rx6; v6 = rv6;
                     rx6 = (x6 * cosXV6) - (v6 * sinXV6);
                     rv6 = (x6 * sinXV6) + (v6 * cosXV6);
 
-                    // rotate6D_YV
                     y6 = ry6; v6 = rv6;
                     ry6 = (y6 * cosYV6) - (v6 * sinYV6);
                     rv6 = (y6 * sinYV6) + (v6 * cosYV6);
 
-                    // rotate6D_ZV
                     z6 = rz6; v6 = rv6;
                     rz6 = (z6 * cosZV6) - (v6 * sinZV6);
                     rv6 = (z6 * sinZV6) + (v6 * cosZV6);
 
-                    // project6Dto5D
                     u = ru6 + 2;
                     projFactor6 = 2 / u.max(0.1);
                     p5x = rx6 * projFactor6;
@@ -1743,7 +1636,6 @@ AttractorScope {
                     p5w = rw6 * projFactor6;
                     p5v = rv6 * projFactor6;
 
-                    // Inline 5D rotations
                     x5 = p5x; y5 = p5y; z5 = p5z; w5 = p5w; v5 = p5v;
 
                     rx5 = (x5 * cosXW5) - (w5 * sinXW5);
@@ -1766,7 +1658,6 @@ AttractorScope {
                     ry5 = (y5 * cosYV5) - (v5 * sinYV5);
                     rv5 = (y5 * sinYV5) + (v5 * cosYV5);
 
-                    // project5Dto4D
                     v = rv5 + 2;
                     projFactor5 = 2 / v.max(0.1);
                     p4x = rx5 * projFactor5;
@@ -1774,7 +1665,6 @@ AttractorScope {
                     p4z = rz5 * projFactor5;
                     p4w = rw5 * projFactor5;
 
-                    // Inline 4D rotations
                     x4 = p4x; y4 = p4y; z4 = p4z; w4 = p4w;
 
                     rx4 = (x4 * cosXW4) - (w4 * sinXW4);
@@ -1789,14 +1679,12 @@ AttractorScope {
                     rz4 = (z4 * cosZW4) - (w4 * sinZW4);
                     rw4 = (z4 * sinZW4) + (w4 * cosZW4);
 
-                    // project4Dto3D
                     w = rw4 + 2;
                     projFactor4 = 2 / w.max(0.1);
                     p3x = rx4 * projFactor4;
                     p3y = ry4 * projFactor4;
                     p3z = rz4 * projFactor4;
 
-                    // Inline 3D rotations
                     y3 = p3y; z3 = p3z;
                     ry3 = (y3 * cosX) - (z3 * sinX);
                     rz3 = (y3 * sinX) + (z3 * cosX);
@@ -1805,7 +1693,6 @@ AttractorScope {
                     rx3 = (x3 * cosY) + (rz3 * sinY);
                     rz3 = (rz3 * cosY) - (x3 * sinY);
 
-                    // Scale and project
                     rx3 = rx3 * scale;
                     ry3 = ry3 * scale;
                     rz3 = rz3 * scale;
@@ -1823,7 +1710,7 @@ AttractorScope {
                 };
             };
 
-            this.drawWithStyle(screenPoints, bounds, numPoints, fadeStart, fadeLength, "6D");
+            this.drawWithStyle(screenPoints, bounds, numPoints, "6D");
         };
     }
 
@@ -1833,46 +1720,39 @@ AttractorScope {
     style { ^drawStyle }
     style_ { arg val; setStyle.value(val) }
 
-	resetView {
-		angleX = 0.6;
-		angleY = 0.8;
-		angle4D_XW = 0.0;
-		angle4D_YW = 0.0;
-		angle4D_ZW = 0.0;
-		angle5D_XW = 0.0;
-		angle5D_YW = 0.0;
-		angle5D_ZW = 0.0;
-		angle5D_XV = 0.0;
-		angle5D_YV = 0.0;
-		angle6D_XW = 0.0;
-		angle6D_YW = 0.0;
-		angle6D_ZW = 0.0;
-		angle6D_XV = 0.0;
-		angle6D_YV = 0.0;
-		angle6D_ZV = 0.0;
-		setZoom.value(1.0);
-	}
+    resetView {
+        angleX = 0.6;
+        angleY = 0.8;
+        angle4D_XW = 0.0;
+        angle4D_YW = 0.0;
+        angle4D_ZW = 0.0;
+        angle5D_XW = 0.0;
+        angle5D_YW = 0.0;
+        angle5D_ZW = 0.0;
+        angle5D_XV = 0.0;
+        angle5D_YV = 0.0;
+        angle6D_XW = 0.0;
+        angle6D_YW = 0.0;
+        angle6D_ZW = 0.0;
+        angle6D_XV = 0.0;
+        angle6D_YV = 0.0;
+        angle6D_ZV = 0.0;
+        setZoom.value(1.0);
+    }
 
-	resetAll {
-		// "Resetting all AttractorScope parameters to their defaults.".postln;
-
-		// Reset the "subject" (shape, style, etc.)
-		setDelayTime1.value(defaultDelayTime);
-		setTrailLength.value(500);
-		setResolution.value(800);
-		setColor.value(0);
-		setStyle.value(0);
-		setRotationSpeed.value(1.0);
-		setAutoRotate.value(true);
-
-		// Reset the "camera" by calling the dedicated method
-		this.resetView;
-
-		// Set dimension last, as it triggers a synth rebuild
-		if(dimension != 3) {
-			setDimension.value(3);
-		};
-	}
+    resetAll {
+        setDelayTime1.value(defaultDelayTime);
+        setTrailLength.value(500);
+        setResolution.value(800);
+        setColor.value(0);
+        setStyle.value(0);
+        setRotationSpeed.value(1.0);
+        setAutoRotate.value(true);
+        this.resetView;
+        if(dimension != 3) {
+            setDimension.value(3);
+        };
+    }
 
     clearPoints {
         points = [];
@@ -1889,45 +1769,43 @@ AttractorScope {
         };
     }
 
-	exportScreenshot {
-		var img, filename, timestamp, filepath, picturesDir;
+    exportScreenshot {
+        var img, filename, timestamp, filepath, picturesDir;
 
-		if(scopeView.isNil) {
-			"Cannot export: scopeView is not available".postln;
-			^this;
-		};
+        if(scopeView.isNil) {
+            "Cannot export: scopeView is not available".postln;
+            ^this;
+        };
 
-		try {
-			timestamp = Date.getDate.format("%Y%m%d_%H%M%S");
-			filename = "AttractorScope_" ++ dimension ++ "D_" ++ timestamp ++ ".png";
+        try {
+            timestamp = Date.getDate.format("%Y%m%d_%H%M%S");
+            filename = "AttractorScope_" ++ dimension ++ "D_" ++ timestamp ++ ".png";
+            picturesDir = Platform.userHomeDir +/+ "Pictures";
+            filepath = picturesDir +/+ filename;
 
-			// Save to Pictures folder (cross-platform)
-			picturesDir = Platform.userHomeDir +/+ "Pictures";
-			filepath = picturesDir +/+ filename;
+            img = Image.fromWindow(scopeView);
+            img.write(filepath, "png");
+            img.free;
 
-			img = Image.fromWindow(scopeView);
-			img.write(filepath, "png");  // PNG is lossless - no quality parameter needed
-			img.free;
-
-			("Screenshot saved: " ++ filename).postln;
-			("Saved to: " ++ filepath).postln;
-		} {
-			"Error exporting screenshot".postln;
-		};
-	}
+            ("Screenshot saved: " ++ filename).postln;
+            ("Saved to: " ++ filepath).postln;
+        } {
+            "Error exporting screenshot".postln;
+        };
+    }
 
     keyDown { arg char, mod;
         case(
-			{ char === $] }, { delay1Slider.increment; delay1Slider.doAction },
-			{ char === $[ }, { delay1Slider.decrement; delay1Slider.doAction },
+            { char === $] }, { delay1Slider.increment; delay1Slider.doAction },
+            { char === $[ }, { delay1Slider.decrement; delay1Slider.doAction },
             { char === ${ }, { trailSlider.decrement; trailSlider.doAction },
-			{ char === $} }, { trailSlider.increment; trailSlider.doAction },
+            { char === $} }, { trailSlider.increment; trailSlider.doAction },
             { char === $< }, { resolutionSlider.decrement; resolutionSlider.doAction },
             { char === $> }, { resolutionSlider.increment; resolutionSlider.doAction },
             { char === $, }, { rotationSpeedSlider.decrement; rotationSpeedSlider.doAction },
             { char === $. }, { rotationSpeedSlider.increment; rotationSpeedSlider.doAction },
-			{ char === $= }, { zoomSlider.increment; zoomSlider.doAction },
-			{ char === $- }, { zoomSlider.decrement; zoomSlider.doAction },
+            { char === $= }, { zoomSlider.increment; zoomSlider.doAction },
+            { char === $- }, { zoomSlider.decrement; zoomSlider.doAction },
             { char === $s }, { this.style = (drawStyle + 1) % 6 },
             { char === $2 }, { setDimension.value(2) },
             { char === $3 }, { setDimension.value(3) },
@@ -1938,7 +1816,7 @@ AttractorScope {
             { char === $r }, { this.resetAll },
             { char === $a }, { setAutoRotate.value(autoRotate.not) },
             { char === $c }, { setColor.value((colorChoice + 1) % 13) },
-			{ char === $e }, { this.exportScreenshot },
+            { char === $e }, { this.exportScreenshot },
             { ^false }
         );
         ^true;

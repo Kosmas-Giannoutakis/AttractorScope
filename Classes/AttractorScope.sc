@@ -88,9 +88,9 @@ AttractorScope {
         zoom = zoomSpec.constrain(zoom_ ? 1.0);
         colorChoice = 0;
         drawStyle = 0;
-        fps = 60;
+        fps = 30;
 
-        smallSize = Size(870, 830);
+        smallSize = Size(890, 830);
         largeSize = Size(1160, 1130);
 
         angleX = 0.6;
@@ -1762,7 +1762,7 @@ AttractorScope {
         setStyle.value(0);
         setRotationSpeed.value(1.0);
         setAutoRotate.value(true);
-        setFps.value(60);
+        setFps.value(30);
         this.resetView;
         if(dimension != 3) {
             setDimension.value(3);

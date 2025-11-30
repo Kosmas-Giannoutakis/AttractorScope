@@ -2,7 +2,7 @@ AttractorScope {
     classvar scopeInstances;
     classvar <defaultDelayTime = 0.01;
 
-    var makeGui, setDelayTime1, setIndex, setRate, setTrailLength, setResolution, setDimension, setRotationSpeed, setColor, setZoom, setStyle, setAutoRotate;
+    var makeGui, setDelayTime1, setIndex, setRate, setTrailLength, setResolution, setDimension, setRotationSpeed, setColor, setZoom, setStyle, setAutoRotate, setFps;
     var updateColors, rotateX, rotateY, project;
     var rotate4D_XW, rotate4D_YW, rotate4D_ZW, project4Dto3D;
     var rotate5D_XW, rotate5D_YW, rotate5D_ZW, rotate5D_XV, rotate5D_YV, project5Dto4D;
@@ -13,16 +13,16 @@ AttractorScope {
 
     var <window, <view, <scopeView;
     var delay1Slider, trailSlider, resolutionSlider, rotationSpeedSlider, zoomSlider;
-    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu, autoRotateCheckBox, exportButton;
+    var delay1Box, trailBox, resolutionBox, rotationSpeedBox, zoomBox, idxNumBox, rateMenu, dimensionMenu, colorMenu, styleMenu, autoRotateCheckBox, exportButton, fpsBox;
 
     var <server, synth;
     var maxDelayTime, maxBufSize;
-    var aBusSpec, cBusSpec, delaySpec, trailSpec, resolutionSpec, rotationSpeedSpec, zoomSpec;
+    var aBusSpec, cBusSpec, delaySpec, trailSpec, resolutionSpec, rotationSpeedSpec, zoomSpec, fpsSpec;
     var <>smallSize, <>largeSize;
 
     var <bus;
     var busSpec;
-    var <delayTime1, <delayTime2, <delayTime3, <delayTime4, <delayTime5, <trailLength, <resolution, <dimension, <rotationSpeed, <colorChoice, <drawStyle;
+    var <delayTime1, <delayTime2, <delayTime3, <delayTime4, <delayTime5, <trailLength, <resolution, <dimension, <rotationSpeed, <colorChoice, <drawStyle, <fps;
     var <angleX, <angleY, <angle4D_XW, <angle4D_YW, <angle4D_ZW;
     var <angle5D_XW, <angle5D_YW, <angle5D_ZW, <angle5D_XV, <angle5D_YV;
     var <angle6D_XW, <angle6D_YW, <angle6D_ZW, <angle6D_XV, <angle6D_YV, <angle6D_ZV;
@@ -74,6 +74,7 @@ AttractorScope {
         resolutionSpec = ControlSpec(100, 2000, \exponential, step: 1);
         rotationSpeedSpec = ControlSpec(0.1, 5.0, \exponential);
         zoomSpec = ControlSpec(0.25, 4.0, \exponential);
+        fpsSpec = ControlSpec(10, 120, \lin, 1);
 
         delayTime1 = delaySpec.constrain(delayTime1_ ? defaultDelayTime);
         delayTime2 = delayTime1 * 2;
@@ -87,9 +88,10 @@ AttractorScope {
         zoom = zoomSpec.constrain(zoom_ ? 1.0);
         colorChoice = 0;
         drawStyle = 0;
+        fps = 60;
 
-        smallSize = Size(810, 830);
-        largeSize = Size(1100, 1130);
+        smallSize = Size(870, 830);
+        largeSize = Size(1160, 1130);
 
         angleX = 0.6;
         angleY = 0.8;
@@ -745,14 +747,14 @@ AttractorScope {
                     bounds: (smallSize).asRect.center_(Window.availableBounds.center)
                 ).name_("Attractor Scope");
             } {
-                view = View(parent, Rect(0, 0, 800, 830));
+                view = View(parent, Rect(0, 0, 860, 830));
                 window = nil;
             };
 
             scopeView = UserView();
             scopeView.drawFunc = { this.draw };
             scopeView.animate = true;
-            scopeView.frameRate = 30;
+            scopeView.frameRate = fps;
             scopeView.minHeight_(500);
             scopeView.canFocus = true;
 
@@ -803,6 +805,8 @@ AttractorScope {
             resolutionBox = NumberBox().decimals_(0).step_(10).scroll_step_(10);
             rotationSpeedBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
             zoomBox = NumberBox().decimals_(2).step_(0.1).scroll_step_(0.1);
+            fpsBox = NumberBox().decimals_(0).step_(1).scroll_step_(5).fixedWidth_(45).clipLo_(10).clipHi_(120);
+            fpsBox.value = fps;
 
             gizmo = "999".bounds(idxNumBox.font).width + 20;
             idxNumBox.fixedWidth = gizmo;
@@ -835,6 +839,8 @@ AttractorScope {
             view.layout =
             VLayout(
                 HLayout(
+                    StaticText().string_("FPS:"),
+                    fpsBox,
                     StaticText().string_("Dimension:"),
                     dimensionMenu,
                     StaticText().string_("Color:"),
@@ -901,6 +907,7 @@ AttractorScope {
             styleMenu.action = { |me| setStyle.value(me.value) };
             idxNumBox.action = { |me| setIndex.value(me.value) };
             rateMenu.action = { |me| setRate.value(me.value) };
+            fpsBox.action = { |me| setFps.value(me.value) };
             scopeView.keyDownAction = { |v, char, mod| this.keyDown(char, mod) };
             view.onClose = { view = nil; this.quit; };
 
@@ -949,6 +956,12 @@ AttractorScope {
             scale = baseScale * zoom;
             zoomBox.value = zoom;
             zoomSlider.value = zoomSpec.unmap(zoom);
+        };
+
+        setFps = { arg val;
+            fps = fpsSpec.constrain(val).asInteger;
+            if(scopeView.notNil) { scopeView.frameRate = fps };
+            if(fpsBox.notNil) { fpsBox.value = fps };
         };
 
         setColor = { arg val;
@@ -1162,7 +1175,7 @@ AttractorScope {
                     });
                 };
 
-                (1/30).wait;
+                (1/fps).wait;
             };
         });
 
@@ -1215,7 +1228,7 @@ AttractorScope {
             " | Res: " ++ resolution ++ " | Points: " ++ numPoints ++
             " | Dt=" ++ delayTime1.round(0.0001) ++ "s" ++
             if(dimension > 2, " | Speed: " ++ rotationSpeed.round(0.1) ++ "× | " ++ if(autoRotate, "Auto", "Paused"), "") ++
-            " | Zoom: " ++ zoom.round(0.01) ++ "×",
+            " | Zoom: " ++ zoom.round(0.01) ++ "× | FPS: " ++ fps,
             Point(10, 10),
             Font.default,
             Color.white
@@ -1719,6 +1732,7 @@ AttractorScope {
     bus_ { arg b; bus = b; }
     style { ^drawStyle }
     style_ { arg val; setStyle.value(val) }
+    fps_ { arg val; setFps.value(val) }
 
     resetView {
         angleX = 0.6;
@@ -1748,6 +1762,7 @@ AttractorScope {
         setStyle.value(0);
         setRotationSpeed.value(1.0);
         setAutoRotate.value(true);
+        setFps.value(60);
         this.resetView;
         if(dimension != 3) {
             setDimension.value(3);
@@ -1817,6 +1832,7 @@ AttractorScope {
             { char === $a }, { setAutoRotate.value(autoRotate.not) },
             { char === $c }, { setColor.value((colorChoice + 1) % 13) },
             { char === $e }, { this.exportScreenshot },
+            { char === $f }, { setFps.value((fps + 10).clip(10, 120)) },
             { ^false }
         );
         ^true;
